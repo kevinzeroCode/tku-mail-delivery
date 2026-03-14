@@ -150,6 +150,7 @@ export default function AdminPage() {
           <Title level={4} style={{ color: '#fff', margin: 0 }}>郵件收發管理後台</Title>
         </Space>
         <Space>
+          <Button type="text" style={{ color: '#fff' }} href="/">公開查詢頁</Button>
           <Tooltip title="系統設定">
             <Button icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)} />
           </Tooltip>

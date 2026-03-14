@@ -44,7 +44,8 @@ export default function QueryPage() {
     <Layout style={{ minHeight: '100vh' }}>
       <Header style={{ background: '#1677ff', display: 'flex', alignItems: 'center', gap: 12 }}>
         <MailOutlined style={{ color: '#fff', fontSize: 24 }} />
-        <Title level={4} style={{ color: '#fff', margin: 0 }}>郵件收發查詢系統</Title>
+        <Title level={4} style={{ color: '#fff', margin: 0, flex: 1 }}>郵件收發查詢系統</Title>
+        <Button type="text" style={{ color: '#fff' }} href="/admin">管理後台</Button>
       </Header>
 
       <Content style={{ padding: '40px 24px', maxWidth: 640, margin: '0 auto', width: '100%' }}>
