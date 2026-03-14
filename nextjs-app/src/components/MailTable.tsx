@@ -124,7 +124,7 @@ export default function MailTable({ items, onRefresh }: Props) {
 
     const body: Record<string, unknown> = {
       ...values,
-      pickupDate: values.pickupDate?.toISOString(),
+      pickupDate: values.pickupDate ? values.pickupDate.toISOString() : null,
       photoOcrText: editPhotoOcrText || null,
     }
     if (newPhotoPath !== undefined) body.photoPath = newPhotoPath
