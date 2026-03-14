@@ -32,6 +32,7 @@ export default function MailTable({ items, onRefresh }: Props) {
   const [detailItem, setDetailItem] = useState<MailItem | null>(null)
   const [photoOcrEdit, setPhotoOcrEdit] = useState<string>('')
   const [photoOcrSaving, setPhotoOcrSaving] = useState(false)
+  const [photoOcrLoading, setPhotoOcrLoading] = useState(false)
 
   const filtered = items.filter(item => {
     if (filterStatus && item.status !== filterStatus) return false
@@ -522,12 +523,39 @@ export default function MailTable({ items, onRefresh }: Props) {
                     style={{ marginTop: 8 }}
                     items={[{
                       key: 'photo-ocr',
-                      label: '貨物照片備註文字',
+                      label: '貨物照片 OCR 文字',
                       children: (
                         <Space direction="vertical" style={{ width: '100%' }}>
+                          <Button
+                            size="small"
+                            loading={photoOcrLoading}
+                            onClick={async () => {
+                              setPhotoOcrLoading(true)
+                              try {
+                                const imgRes = await fetch(detailItem.photoPath!)
+                                const blob = await imgRes.blob()
+                                const file = new File([blob], 'photo.jpg', { type: blob.type })
+                                const fd = new FormData()
+                                fd.append('file', file)
+                                const res = await fetch('/api/ocr', { method: 'POST', body: fd })
+                                const data = await res.json()
+                                if (data.rawText) {
+                                  setPhotoOcrEdit(data.rawText)
+                                } else if (data.error) {
+                                  message.warning(data.error)
+                                }
+                              } catch {
+                                message.error('OCR 執行失敗')
+                              } finally {
+                                setPhotoOcrLoading(false)
+                              }
+                            }}
+                          >
+                            對照片執行 OCR
+                          </Button>
                           <Input.TextArea
                             rows={4}
-                            placeholder="可在此輸入貨物照片相關文字，方便複製填入上方欄位"
+                            placeholder="點擊上方按鈕對照片執行 OCR，結果會顯示在這裡，也可手動編輯"
                             value={photoOcrEdit}
                             onChange={e => setPhotoOcrEdit(e.target.value)}
                           />
@@ -535,6 +563,7 @@ export default function MailTable({ items, onRefresh }: Props) {
                             size="small"
                             type="primary"
                             loading={photoOcrSaving}
+                            disabled={!photoOcrEdit}
                             onClick={async () => {
                               setPhotoOcrSaving(true)
                               const res = await fetch(`/api/items/${detailItem.id}`, {
@@ -551,7 +580,7 @@ export default function MailTable({ items, onRefresh }: Props) {
                               }
                             }}
                           >
-                            儲存備註
+                            儲存 OCR 文字
                           </Button>
                         </Space>
                       ),
