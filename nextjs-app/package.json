@@ -1,0 +1,29 @@
+{
+  "name": "mailchecklist",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@ant-design/nextjs-registry": "^1.0.1",
+    "@ant-design/v5-patch-for-react-19": "^1.0.3",
+    "@prisma/client": "^5.22.0",
+    "antd": "^5.22.0",
+    "dayjs": "^1.11.13",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-webcam": "^7.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "prisma": "^5.22.0",
+    "typescript": "^5.7.0"
+  }
+}

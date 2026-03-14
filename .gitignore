@@ -1,0 +1,37 @@
+# Node.js
+node_modules/
+npm-debug.log*
+
+# Next.js
+.next/
+out/
+
+# 環境變數（含機密）
+.env
+.env.local
+.env*.local
+
+# 資料庫
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# 上傳的圖片（不進版控）
+nextjs-app/public/uploads/*
+!nextjs-app/public/uploads/.gitkeep
+
+# Python
+ocr-service/venv/
+ocr-service/__pycache__/
+ocr-service/*.pyc
+ocr-service/.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,40 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model MailItem {
+  id               Int       @id @default(autoincrement())
+  trackingCode     String                          // 6-8位代碼（查詢鍵）
+  mailType         String    @default("掛號")      // 普通/掛號/公文/包裹
+  receivedDate     DateTime  @default(now())
+  photoPath        String?                         // Webcam 拍攝照片路徑
+  listImagePath    String?                         // 簽收清單圖片路徑
+  ocrRawText       String?                         // OCR 原始文字
+  recipientName    String?                         // 收件人姓名
+  recipientEmail   String?                         // 收件人 Email（發通知用）
+  notificationSent Boolean   @default(false)
+  notificationDate DateTime?
+  deadlineDays     Int       @default(7)           // 幾天內需領取
+  pickupMethod     String?                         // 領取方式：自行領取/代收通知/付費寄回/說明告知/其他
+  pickupPerson     String?                         // 實際領取人
+  pickupDate       DateTime?
+  status           String    @default("待領取")    // 待領取/已領取/已退回
+  notes            String?                         // 備註
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([trackingCode])
+  @@index([status])
+}
+
+model Setting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+}

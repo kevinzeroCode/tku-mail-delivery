@@ -1,0 +1,43 @@
+services:
+  # ── Next.js 前端 + API ──────────────────────────────
+  nextjs:
+    build:
+      context: ./nextjs-app
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "file:/app/data/prod.db"
+      OCR_SERVICE_URL: "http://ocr:8000"   # 容器內部溝通仍走 8000
+      TEAMS_WEBHOOK_URL: "${TEAMS_WEBHOOK_URL}"
+      NEXT_PUBLIC_BASE_URL: "${NEXT_PUBLIC_BASE_URL:-http://localhost:3000}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-changeme}"
+    volumes:
+      - db_data:/app/data          # SQLite 持久化
+      - uploads:/app/public/uploads # 圖片持久化
+    depends_on:
+      ocr:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Python OCR 微服務 ────────────────────────────────
+  ocr:
+    build:
+      context: ./ocr-service
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000"
+    volumes:
+      - ocr_models:/root/.EasyOCR   # 模型快取（只下載一次）
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s   # 首次下載模型需要時間
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  uploads:
+  ocr_models:
