@@ -21,4 +21,4 @@ COPY . .
 # 模型在第一次啟動時自動下載至 /root/.EasyOCR（由 volume 持久化）
 
 EXPOSE 8000
-CMD ["python", "main.py"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
