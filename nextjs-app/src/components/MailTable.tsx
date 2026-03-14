@@ -3,7 +3,7 @@ import { useState } from 'react'
 import {
   Table, Button, Space, Select, Input, Tooltip, Popconfirm,
   message, Modal, Form, DatePicker, InputNumber, Image, Tag, Alert, Drawer,
-  Descriptions, Divider, Upload,
+  Descriptions, Divider, Upload, Collapse,
 } from 'antd'
 import {
   BellOutlined, CheckOutlined, RollbackOutlined,
@@ -518,13 +518,23 @@ export default function MailTable({ items, onRefresh }: Props) {
 
             {detailItem.ocrRawText && (
               <>
-                <Divider>OCR 原始文字</Divider>
-                <pre style={{
-                  background: '#f5f5f5', padding: 12, borderRadius: 8,
-                  fontSize: 11, maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap'
-                }}>
-                  {detailItem.ocrRawText}
-                </pre>
+                <Divider style={{ marginBottom: 8 }} />
+                <Collapse
+                  ghost
+                  items={[{
+                    key: 'ocr',
+                    label: 'OCR 原始文字',
+                    children: (
+                      <pre style={{
+                        background: '#f5f5f5', padding: 12, borderRadius: 8,
+                        fontSize: 11, maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap',
+                        margin: 0,
+                      }}>
+                        {detailItem.ocrRawText}
+                      </pre>
+                    ),
+                  }]}
+                />
               </>
             )}
           </>
