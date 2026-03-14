@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { Upload, Button, Alert, Spin, List, Typography } from 'antd'
+import { Upload, Button, Alert, Spin, List, Typography, Space } from 'antd'
 import { UploadOutlined, ScanOutlined } from '@ant-design/icons'
 import type { UploadFile } from 'antd'
 
@@ -50,7 +50,12 @@ export default function OcrUpload({ onResult }: Props) {
         </Button>
       </Upload>
 
-      {loading && <Spin style={{ marginLeft: 12 }} tip="OCR 辨識中..." />}
+      {loading && (
+        <Space style={{ marginLeft: 12 }}>
+          <Spin size="small" />
+          <Typography.Text type="secondary">OCR 辨識中...</Typography.Text>
+        </Space>
+      )}
 
       {error && <Alert type="error" message={error} style={{ marginTop: 8 }} />}
 
