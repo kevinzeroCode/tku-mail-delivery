@@ -24,6 +24,8 @@ export default function MailTable({ items, onRefresh }: Props) {
   const [editForm] = Form.useForm()
   const [editPhotoFile, setEditPhotoFile] = useState<File | null>(null)
   const [editPhotoPreview, setEditPhotoPreview] = useState<string | null>(null)
+  const [editPhotoOcrText, setEditPhotoOcrText] = useState<string>('')
+  const [editPhotoOcrLoading, setEditPhotoOcrLoading] = useState(false)
   const [filterStatus, setFilterStatus] = useState<string>('')
   const [filterType, setFilterType] = useState<string>('')
   const [search, setSearch] = useState('')
@@ -90,6 +92,7 @@ export default function MailTable({ items, onRefresh }: Props) {
     setEditingItem(item)
     setEditPhotoFile(null)
     setEditPhotoPreview(item.photoPath ?? null)
+    setEditPhotoOcrText(item.photoOcrText ?? '')
     editForm.setFieldsValue({
       recipientName: item.recipientName,
       recipientEmail: item.recipientEmail,
@@ -122,6 +125,7 @@ export default function MailTable({ items, onRefresh }: Props) {
     const body: Record<string, unknown> = {
       ...values,
       pickupDate: values.pickupDate?.toISOString(),
+      photoOcrText: editPhotoOcrText || null,
     }
     if (newPhotoPath !== undefined) body.photoPath = newPhotoPath
 
@@ -139,6 +143,7 @@ export default function MailTable({ items, onRefresh }: Props) {
     setEditingItem(null)
     setEditPhotoFile(null)
     setEditPhotoPreview(null)
+    setEditPhotoOcrText('')
     onRefresh()
   }
 
@@ -373,7 +378,7 @@ export default function MailTable({ items, onRefresh }: Props) {
 
       {/* 編輯 Modal */}
       <Modal title="編輯郵件" open={!!editingItem} onOk={saveEdit}
-        onCancel={() => { setEditingItem(null); setEditPhotoFile(null); setEditPhotoPreview(null) }}
+        onCancel={() => { setEditingItem(null); setEditPhotoFile(null); setEditPhotoPreview(null); setEditPhotoOcrText('') }}
         okText="儲存" cancelText="取消">
         <Form form={editForm} layout="vertical">
           <Space style={{ width: '100%' }}>
@@ -415,15 +420,26 @@ export default function MailTable({ items, onRefresh }: Props) {
         </Form>
 
         <Divider style={{ margin: '12px 0' }}>貨物照片</Divider>
-        <Space align="start">
+        <Space align="start" style={{ marginBottom: 8 }}>
           <Upload
             accept="image/*"
             showUploadList={false}
-            beforeUpload={file => {
+            beforeUpload={async file => {
               setEditPhotoFile(file)
               const reader = new FileReader()
               reader.onload = e => setEditPhotoPreview(e.target?.result as string)
               reader.readAsDataURL(file)
+              // 自動 OCR
+              setEditPhotoOcrLoading(true)
+              try {
+                const fd = new FormData()
+                fd.append('file', file)
+                const res = await fetch('/api/ocr', { method: 'POST', body: fd })
+                const data = await res.json()
+                if (data.rawText) setEditPhotoOcrText(data.rawText)
+              } catch { /* silent */ } finally {
+                setEditPhotoOcrLoading(false)
+              }
               return false
             }}
           >
@@ -432,7 +448,7 @@ export default function MailTable({ items, onRefresh }: Props) {
             </Button>
           </Upload>
           {editPhotoPreview && (
-            <div style={{ position: 'relative' }}>
+            <div>
               <Image
                 src={editPhotoPreview}
                 width={120}
@@ -446,6 +462,18 @@ export default function MailTable({ items, onRefresh }: Props) {
             </div>
           )}
         </Space>
+        <Collapse ghost items={[{
+          key: 'ocr',
+          label: editPhotoOcrLoading ? '⏳ OCR 辨識中...' : '照片文字備註（OCR 結果 / 可手動編輯）',
+          children: (
+            <Input.TextArea
+              rows={4}
+              placeholder="上傳照片後自動填入 OCR 結果，也可手動輸入，方便複製填入上方欄位"
+              value={editPhotoOcrText}
+              onChange={e => setEditPhotoOcrText(e.target.value)}
+            />
+          ),
+        }]} />
       </Modal>
 
       {/* 詳細 / 圖片預覽 Drawer */}

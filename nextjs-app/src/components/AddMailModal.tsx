@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import {
   Modal, Form, Input, Select, DatePicker, InputNumber,
-  Tabs, Button, Space, message,
+  Tabs, Button, Space, message, Collapse,
 } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -25,10 +25,27 @@ export default function AddMailModal({ open, onClose, onCreated, defaultDeadline
   const [ocrRawText, setOcrRawText] = useState('')
   const [listImagePath, setListImagePath] = useState('')
   const [activeTab, setActiveTab] = useState('manual')
+  const [webcamOcrText, setWebcamOcrText] = useState('')
+  const [webcamOcrLoading, setWebcamOcrLoading] = useState(false)
 
-  const handlePhotoCapture = (dataUrl: string) => {
+  const handlePhotoCapture = async (dataUrl: string) => {
     setPhotoDataUrl(dataUrl)
-    message.success('照片已拍攝')
+    message.success('照片已拍攝，正在 OCR 辨識...')
+    setWebcamOcrLoading(true)
+    try {
+      const blob = await fetch(dataUrl).then(r => r.blob())
+      const file = new File([blob], 'webcam.jpg', { type: 'image/jpeg' })
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/ocr', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (data.rawText) {
+        setWebcamOcrText(data.rawText)
+        message.success('OCR 辨識完成')
+      }
+    } catch { /* silent */ } finally {
+      setWebcamOcrLoading(false)
+    }
   }
 
   const handleOcrResult = (codes: string[], rawText: string, savedPath: string) => {
@@ -76,6 +93,7 @@ export default function AddMailModal({ open, onClose, onCreated, defaultDeadline
             photoPath,
             listImagePath: listImagePath || null,
             ocrRawText: ocrRawText || null,
+            photoOcrText: webcamOcrText || null,
           }),
         })
         if (!res.ok) {
@@ -93,6 +111,7 @@ export default function AddMailModal({ open, onClose, onCreated, defaultDeadline
       setPendingCodes([])
       setOcrRawText('')
       setListImagePath('')
+      setWebcamOcrText('')
     } catch (e) {
       message.error(e instanceof Error ? e.message : '新增失敗')
     } finally {
@@ -131,7 +150,23 @@ export default function AddMailModal({ open, onClose, onCreated, defaultDeadline
       {activeTab === 'webcam' && (
         <div style={{ marginBottom: 16 }}>
           <WebcamCapture onCapture={handlePhotoCapture} />
-          {photoDataUrl && <div style={{ color: 'green', marginTop: 8 }}>✓ 照片已拍攝，送出後自動儲存</div>}
+          {photoDataUrl && (
+            <>
+              <div style={{ color: 'green', marginTop: 8 }}>✓ 照片已拍攝，送出後自動儲存</div>
+              <Collapse ghost style={{ marginTop: 4 }} items={[{
+                key: 'ocr',
+                label: webcamOcrLoading ? '⏳ OCR 辨識中...' : '照片 OCR 文字（可複製填入下方欄位）',
+                children: (
+                  <Input.TextArea
+                    rows={4}
+                    placeholder={webcamOcrLoading ? '辨識中...' : 'OCR 服務離線或無文字結果'}
+                    value={webcamOcrText}
+                    onChange={e => setWebcamOcrText(e.target.value)}
+                  />
+                ),
+              }]} />
+            </>
+          )}
         </div>
       )}
 
