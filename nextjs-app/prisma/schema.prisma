@@ -15,7 +15,8 @@ model MailItem {
   receivedDate     DateTime  @default(now())
   photoPath        String?                         // Webcam 拍攝照片路徑
   listImagePath    String?                         // 簽收清單圖片路徑
-  ocrRawText       String?                         // OCR 原始文字
+  ocrRawText       String?                         // OCR 原始文字（簽收清單）
+  photoOcrText     String?                         // 貨物照片備註文字
   recipientName    String?                         // 收件人姓名
   recipientEmail   String?                         // 收件人 Email（發通知用）
   notificationSent Boolean   @default(false)

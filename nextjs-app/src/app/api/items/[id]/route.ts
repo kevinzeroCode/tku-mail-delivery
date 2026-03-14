@@ -45,6 +45,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
     if (body.photoPath !== undefined) updateData.photoPath = body.photoPath || null
     if (body.notes !== undefined) updateData.notes = body.notes
+    if (body.photoOcrText !== undefined) updateData.photoOcrText = body.photoOcrText || null
     if (body.notificationSent !== undefined) {
       updateData.notificationSent = body.notificationSent
       updateData.notificationDate = body.notificationSent ? new Date() : null

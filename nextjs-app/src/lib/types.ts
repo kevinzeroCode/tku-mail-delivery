@@ -9,6 +9,7 @@ export interface MailItem {
   photoPath: string | null
   listImagePath: string | null
   ocrRawText: string | null
+  photoOcrText: string | null
   recipientName: string | null
   recipientEmail: string | null
   notificationSent: boolean
