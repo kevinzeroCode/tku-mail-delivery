@@ -21,4 +21,4 @@ COPY . .
 # 模型在第一次啟動時自動下載至 /root/.EasyOCR（由 volume 持久化）
 
 EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
