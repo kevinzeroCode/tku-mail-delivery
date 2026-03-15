@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { writeFile } from 'fs/promises'
 import path from 'path'
 
+export const maxDuration = 60 // Vercel hobby plan 最大 60 秒
+
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
 
 // POST /api/ocr — 接收圖片，轉發給 Python OCR 服務
