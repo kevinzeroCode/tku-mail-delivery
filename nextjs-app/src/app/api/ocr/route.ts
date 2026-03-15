@@ -27,11 +27,12 @@ export async function POST(req: NextRequest) {
     const filename = `ocr_${Date.now()}.${safeExt}`
     const savePath = path.join(process.cwd(), 'public', 'uploads', filename)
 
+    let savedFilename: string | null = filename
     try {
       await writeFile(savePath, buffer)
     } catch (fsErr) {
-      console.error('[ocr] 無法儲存上傳檔案', fsErr)
-      return NextResponse.json({ error: '檔案儲存失敗' }, { status: 500 })
+      console.warn('[ocr] 無法儲存上傳檔案（serverless 環境），繼續 OCR', fsErr)
+      savedFilename = null
     }
 
     // 轉發給 Python OCR 微服務
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await ocrRes.json()
-    return NextResponse.json({ ...result, savedPath: `/uploads/${filename}` })
+    return NextResponse.json({ ...result, savedPath: savedFilename ? `/uploads/${savedFilename}` : null })
   } catch (e) {
     console.error('[POST /api/ocr]', e)
     return NextResponse.json({ error: '伺服器錯誤' }, { status: 500 })
