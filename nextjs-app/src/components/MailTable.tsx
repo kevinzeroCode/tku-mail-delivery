@@ -1,196 +1,158 @@
 'use client'
-import { useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import {
-  Table, Button, Space, Select, Input, Tooltip, Popconfirm,
-  message, Modal, Form, DatePicker, InputNumber, Image, Tag, Alert, Drawer,
-  Descriptions, Divider, Upload, Collapse,
+  Table, Button, Space, Input, Tooltip, Alert, Drawer,
+  Descriptions, Divider, Collapse, Image, message, notification, Popconfirm,
 } from 'antd'
 import {
   BellOutlined, CheckOutlined, RollbackOutlined,
-  EditOutlined, DeleteOutlined, EyeOutlined, PictureOutlined, UploadOutlined,
+  EditOutlined, DeleteOutlined, EyeOutlined, PictureOutlined, SearchOutlined, UploadOutlined,
 } from '@ant-design/icons'
-import type { ColumnsType, TableRowSelection } from 'antd/es/table/interface'
+import type { ColumnsType, TableRowSelection, FilterDropdownProps } from 'antd/es/table/interface'
 import dayjs from 'dayjs'
 import StatusBadge from './StatusBadge'
+import { ConfirmActionModal } from './ConfirmActionModal'
+import { PickupModal } from './PickupModal'
+import { EditMailModal } from './EditMailModal'
+import { mailApi } from '@/services/mail'
 import type { MailItem } from '@/lib/types'
+import type { ConfirmAction } from './ConfirmActionModal'
+
+// ── Pre-computed row type (D6: avoid re-parsing dates in onFilter) ────────────
+
+type ComputedItem = MailItem & {
+  _receivedFmt: string   // "MM/DD"
+  _deadlineFmt: string   // "MM/DD"
+}
+
+// ── Shared fuzzy-search filter dropdown ──────────────────────────────────────
+
+function textFilterDropdown(placeholder: string) {
+  return ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: FilterDropdownProps) => (
+    <div style={{ padding: 8 }} onKeyDown={e => e.stopPropagation()}>
+      <Input
+        autoFocus
+        placeholder={placeholder}
+        value={selectedKeys[0] as string}
+        onChange={e => setSelectedKeys(e.target.value ? [e.target.value] : [])}
+        onPressEnter={() => confirm()}
+        style={{ marginBottom: 8, display: 'block' }}
+      />
+      <Space>
+        <Button type="primary" size="small" onClick={() => confirm()}>篩選</Button>
+        <Button size="small" onClick={() => { clearFilters?.(); confirm() }}>清除</Button>
+      </Space>
+    </div>
+  )
+}
+
+const searchIcon = (filtered: boolean) => (
+  <SearchOutlined style={{ color: filtered ? '#1677ff' : undefined }} />
+)
+
+const fuzzy = (value: unknown, text: string | null | undefined) =>
+  String(text ?? '').toLowerCase().includes(String(value).toLowerCase())
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface Props {
   items: MailItem[]
   onRefresh: () => void
 }
 
-export default function MailTable({ items, onRefresh }: Props) {
-  const [editingItem, setEditingItem] = useState<MailItem | null>(null)
-  const [editForm] = Form.useForm()
-  const [editPhotoFile, setEditPhotoFile] = useState<File | null>(null)
-  const [editPhotoPreview, setEditPhotoPreview] = useState<string | null>(null)
-  const [editPhotoOcrText, setEditPhotoOcrText] = useState<string>('')
-  const [editPhotoOcrLoading, setEditPhotoOcrLoading] = useState(false)
-  const [filterStatus, setFilterStatus] = useState<string>('')
-  const [filterType, setFilterType] = useState<string>('')
-  const [search, setSearch] = useState('')
+export default memo(function MailTable({ items, onRefresh }: Props) {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [batchLoading, setBatchLoading] = useState(false)
+  const [pendingAction, setPendingAction] = useState<ConfirmAction | null>(null)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [pickupItem, setPickupItem] = useState<MailItem | null>(null)
+  const [editItem, setEditItem] = useState<MailItem | null>(null)
   const [detailItem, setDetailItem] = useState<MailItem | null>(null)
-  const [photoOcrEdit, setPhotoOcrEdit] = useState<string>('')
-  const [photoOcrSaving, setPhotoOcrSaving] = useState(false)
+  const [photoOcrEdit, setPhotoOcrEdit] = useState('')
   const [photoOcrLoading, setPhotoOcrLoading] = useState(false)
+  const [photoOcrSaving, setPhotoOcrSaving] = useState(false)
 
-  const filtered = items.filter(item => {
-    if (filterStatus && item.status !== filterStatus) return false
-    if (filterType && item.mailType !== filterType) return false
-    if (search && !item.trackingCode.includes(search) && !(item.recipientName ?? '').includes(search)) return false
-    return true
-  })
+  // D6: pre-compute formatted dates once when data changes, not on every filter call
+  const computedItems = useMemo<ComputedItem[]>(() =>
+    items.map(item => ({
+      ...item,
+      _receivedFmt: dayjs(item.receivedDate).format('MM/DD'),
+      _deadlineFmt: dayjs(item.receivedDate).add(item.deadlineDays, 'day').format('MM/DD'),
+    })),
+    [items],
+  )
 
-  // ── 單筆操作 ──────────────────────────────────────────
+  // ── Row highlight ───────────────────────────────────────────────────────────
 
-  const sendNotify = async (item: MailItem) => {
-    const res = await fetch('/api/notify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemId: item.id }),
-    })
-    if (res.ok) {
-      message.success(`已發送 Teams 通知`)
-      onRefresh()
-    } else {
-      const d = await res.json()
-      message.error(d.error ?? '通知失敗')
-    }
+  const deadlineStyle = (item: ComputedItem) => {
+    if (item.status !== '待領取') return {}
+    const deadline = dayjs(item.receivedDate).add(item.deadlineDays, 'day')
+    if (dayjs().isAfter(deadline)) return { background: '#fff1f0' }
+    if (deadline.diff(dayjs(), 'day') <= 2) return { background: '#fffbe6' }
+    return {}
   }
 
-  const updateStatus = async (item: MailItem, status: string) => {
-    const body: Record<string, unknown> = { status }
-    if (status === '已領取') body.pickupDate = new Date().toISOString()
-    const res = await fetch(`/api/items/${item.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}))
-      message.error(d.error ?? '狀態更新失敗')
-      return
-    }
-    message.success('狀態已更新')
-    onRefresh()
-  }
+  // ── Confirm action (notify / return / delete) ───────────────────────────────
 
-  const deleteItem = async (id: number) => {
-    const res = await fetch(`/api/items/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}))
-      message.error(d.error ?? '刪除失敗')
-      return
-    }
-    message.success('已刪除')
-    onRefresh()
-  }
-
-  const openEdit = (item: MailItem) => {
-    setEditingItem(item)
-    setEditPhotoFile(null)
-    setEditPhotoPreview(item.photoPath ?? null)
-    setEditPhotoOcrText(item.photoOcrText ?? '')
-    editForm.setFieldsValue({
-      recipientName: item.recipientName,
-      recipientEmail: item.recipientEmail,
-      pickupMethod: item.pickupMethod,
-      pickupPerson: item.pickupPerson,
-      mailType: item.mailType,
-      deadlineDays: item.deadlineDays,
-      notes: item.notes,
-      pickupDate: item.pickupDate ? dayjs(item.pickupDate) : null,
-    })
-  }
-
-  const saveEdit = async () => {
-    if (!editingItem) return
-    const values = editForm.getFieldsValue()
-
-    let newPhotoPath: string | undefined
-    if (editPhotoFile) {
-      const fd = new FormData()
-      fd.append('file', editPhotoFile)
-      const uploadRes = await fetch('/api/upload', { method: 'POST', body: fd })
-      if (!uploadRes.ok) {
-        message.error('照片上傳失敗')
-        return
+  const handleConfirmAction = async () => {
+    if (!pendingAction) return
+    setActionLoading(true)
+    try {
+      const { type, item } = pendingAction
+      if (type === 'notify') {
+        await mailApi.notify(item.id)
+        message.success('已發送 Teams 通知')
+      } else if (type === 'return') {
+        await mailApi.put(item.id, { status: '已退回' })
+        message.success('已標記為退回')
+      } else {
+        await mailApi.delete(item.id)
+        message.success('已刪除')
       }
-      const uploadData = await uploadRes.json()
-      newPhotoPath = uploadData.savedPath
+      setPendingAction(null)
+      onRefresh()
+    } catch (e: unknown) {
+      message.error(e instanceof Error ? e.message : '操作失敗')
+    } finally {
+      setActionLoading(false)
     }
-
-    const body: Record<string, unknown> = {
-      ...values,
-      pickupDate: values.pickupDate ? values.pickupDate.toISOString() : null,
-      photoOcrText: editPhotoOcrText || null,
-    }
-    if (newPhotoPath !== undefined) body.photoPath = newPhotoPath
-
-    const res = await fetch(`/api/items/${editingItem.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}))
-      message.error(d.error ?? '儲存失敗')
-      return
-    }
-    message.success('已儲存')
-    setEditingItem(null)
-    setEditPhotoFile(null)
-    setEditPhotoPreview(null)
-    setEditPhotoOcrText('')
-    onRefresh()
   }
 
-  // ── 批量操作 ──────────────────────────────────────────
-
-  const selectedItems = items.filter(i => selectedRowKeys.includes(i.id))
+  // ── Batch operations (D4: Promise.allSettled for granular error reporting) ──
 
   const batchAction = async (action: 'notify' | 'pickup' | 'return' | 'delete') => {
+    const selected = items.filter(i => selectedRowKeys.includes(i.id))
+    const targets = action === 'notify' ? selected.filter(i => i.status === '待領取') : selected
+    if (!targets.length) return
+
     setBatchLoading(true)
-    const targets = action === 'notify'
-      ? selectedItems.filter(i => i.status === '待領取')
-      : selectedItems
+    const results = await Promise.allSettled(targets.map(item => {
+      if (action === 'notify') return mailApi.notify(item.id)
+      if (action === 'delete') return mailApi.delete(item.id)
+      return mailApi.put(item.id, {
+        status: action === 'pickup' ? '已領取' : '已退回',
+        ...(action === 'pickup' ? { pickupDate: new Date().toISOString() } : {}),
+      })
+    }))
+    setBatchLoading(false)
 
-    try {
-      await Promise.all(targets.map(item => {
-        if (action === 'notify') {
-          return fetch('/api/notify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ itemId: item.id }),
-          })
-        }
-        if (action === 'delete') {
-          return fetch(`/api/items/${item.id}`, { method: 'DELETE' })
-        }
-        const status = action === 'pickup' ? '已領取' : '已退回'
-        return fetch(`/api/items/${item.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            status,
-            ...(action === 'pickup' ? { pickupDate: new Date().toISOString() } : {}),
-          }),
-        })
-      }))
+    const succeeded = results.filter(r => r.status === 'fulfilled').length
+    const failed = results.length - succeeded
 
-      message.success(`已完成 ${targets.length} 筆操作`)
-      setSelectedRowKeys([])
-      onRefresh()
-    } catch {
-      message.error('部分操作失敗')
-    } finally {
-      setBatchLoading(false)
+    if (failed > 0) {
+      notification.warning({
+        message: '批量操作部分失敗',
+        description: `成功 ${succeeded} 筆，失敗 ${failed} 筆，請重新整理後確認。`,
+      })
+    } else {
+      message.success(`全部 ${succeeded} 筆操作成功`)
     }
+
+    setSelectedRowKeys([])
+    onRefresh()
   }
 
-  const rowSelection: TableRowSelection<MailItem> = {
+  const rowSelection: TableRowSelection<ComputedItem> = {
     selectedRowKeys,
     onChange: keys => setSelectedRowKeys(keys),
     selections: [
@@ -199,29 +161,22 @@ export default function MailTable({ items, onRefresh }: Props) {
       {
         key: 'pending',
         text: '選取所有待領取',
-        onSelect: () => setSelectedRowKeys(filtered.filter(i => i.status === '待領取').map(i => i.id)),
+        onSelect: () => setSelectedRowKeys(items.filter(i => i.status === '待領取').map(i => i.id)),
       },
     ],
   }
 
-  // ── 行樣式（逾期標色）──────────────────────────────────
+  // ── Column definitions ──────────────────────────────────────────────────────
 
-  const deadlineColor = (item: MailItem) => {
-    if (item.status !== '待領取') return {}
-    const deadline = dayjs(item.receivedDate).add(item.deadlineDays, 'day')
-    if (dayjs().isAfter(deadline)) return { background: '#fff1f0' }
-    if (deadline.diff(dayjs(), 'day') <= 2) return { background: '#fffbe6' }
-    return {}
-  }
-
-  // ── 欄位定義 ──────────────────────────────────────────
-
-  const columns: ColumnsType<MailItem> = [
+  const columns: ColumnsType<ComputedItem> = [
     {
       title: '追蹤碼',
       dataIndex: 'trackingCode',
       key: 'trackingCode',
-      width: 110,
+      width: 120,
+      filterDropdown: textFilterDropdown('搜尋追蹤碼…'),
+      filterIcon: searchIcon,
+      onFilter: (v, r) => fuzzy(v, r.trackingCode),
       render: (v, record) => (
         <Space size={4}>
           <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{v}</span>
@@ -234,83 +189,150 @@ export default function MailTable({ items, onRefresh }: Props) {
         </Space>
       ),
     },
-    { title: '類型', dataIndex: 'mailType', key: 'mailType', width: 70 },
+    {
+      title: '類型',
+      dataIndex: 'mailType',
+      key: 'mailType',
+      width: 70,
+      filters: [
+        { text: '普通', value: '普通' },
+        { text: '掛號', value: '掛號' },
+        { text: '公文', value: '公文' },
+        { text: '包裹', value: '包裹' },
+      ],
+      onFilter: (v, r) => r.mailType === v,
+    },
     {
       title: '到件',
-      dataIndex: 'receivedDate',
       key: 'receivedDate',
-      width: 100,
-      render: v => dayjs(v).format('MM/DD'),
+      width: 90,
+      render: (_, r) => r._receivedFmt,
+      filterDropdown: textFilterDropdown('如：03/15'),
+      filterIcon: searchIcon,
+      onFilter: (v, r) => fuzzy(v, r._receivedFmt),
     },
     {
       title: '期限',
       key: 'deadline',
-      width: 100,
-      render: (_, record) => {
-        const d = dayjs(record.receivedDate).add(record.deadlineDays, 'day')
-        const overdue = record.status === '待領取' && dayjs().isAfter(d)
-        return (
-          <span style={{ color: overdue ? '#ff4d4f' : undefined }}>
-            {d.format('MM/DD')}
-          </span>
-        )
+      width: 90,
+      render: (_, r) => {
+        const overdue = r.status === '待領取' &&
+          dayjs().isAfter(dayjs(r.receivedDate).add(r.deadlineDays, 'day'))
+        return <span style={{ color: overdue ? '#ff4d4f' : undefined }}>{r._deadlineFmt}</span>
       },
+      filterDropdown: textFilterDropdown('如：03/20'),
+      filterIcon: searchIcon,
+      onFilter: (v, r) => fuzzy(v, r._deadlineFmt),
     },
-    { title: '收件人', dataIndex: 'recipientName', key: 'recipientName', width: 90 },
+    {
+      title: '收件人',
+      dataIndex: 'recipientName',
+      key: 'recipientName',
+      width: 90,
+      filterDropdown: textFilterDropdown('搜尋收件人…'),
+      filterIcon: searchIcon,
+      onFilter: (v, r) => fuzzy(v, r.recipientName),
+    },
     {
       title: '狀態',
       dataIndex: 'status',
       key: 'status',
       width: 80,
+      filters: [
+        { text: '待領取', value: '待領取' },
+        { text: '已領取', value: '已領取' },
+        { text: '已退回', value: '已退回' },
+      ],
+      onFilter: (v, r) => r.status === v,
       render: v => <StatusBadge status={v} />,
     },
-    { title: '領取方式', dataIndex: 'pickupMethod', key: 'pickupMethod', width: 90, render: (v: string | null) => v ?? '—' },
-    { title: '領取人', dataIndex: 'pickupPerson', key: 'pickupPerson', width: 80 },
+    {
+      title: '領取方式',
+      dataIndex: 'pickupMethod',
+      key: 'pickupMethod',
+      width: 95,
+      filters: [
+        { text: '自行領取', value: '自行領取' },
+        { text: '代收通知', value: '代收通知' },
+        { text: '付費寄回', value: '付費寄回' },
+        { text: '說明告知', value: '說明告知' },
+        { text: '其他', value: '其他' },
+        { text: '（未設定）', value: '__null__' },
+      ],
+      onFilter: (v, r) => v === '__null__' ? !r.pickupMethod : r.pickupMethod === v,
+      render: (v: string | null) => v ?? '—',
+    },
+    {
+      title: '領取人',
+      dataIndex: 'pickupPerson',
+      key: 'pickupPerson',
+      width: 80,
+      filterDropdown: textFilterDropdown('搜尋領取人…'),
+      filterIcon: searchIcon,
+      onFilter: (v, r) => fuzzy(v, r.pickupPerson),
+    },
     {
       title: '通知',
       key: 'notificationSent',
-      width: 55,
-      render: (_, record) => record.notificationSent
-        ? <Tooltip title={`${dayjs(record.notificationDate).format('MM/DD')} 已通知`}>
+      width: 60,
+      filters: [
+        { text: '已通知', value: 'true' },
+        { text: '未通知', value: 'false' },
+      ],
+      onFilter: (v, r) => String(r.notificationSent) === v,
+      render: (_, r) => r.notificationSent
+        ? <Tooltip title={`${dayjs(r.notificationDate).format('MM/DD')} 已通知`}>
             <BellOutlined style={{ color: '#52c41a' }} />
           </Tooltip>
         : <span style={{ color: '#d9d9d9' }}>—</span>,
     },
-    { title: '備註', dataIndex: 'notes', key: 'notes', ellipsis: true },
+    {
+      title: '備註',
+      dataIndex: 'notes',
+      key: 'notes',
+      ellipsis: true,
+      filterDropdown: textFilterDropdown('搜尋備註…'),
+      filterIcon: searchIcon,
+      onFilter: (v, r) => fuzzy(v, r.notes),
+    },
     {
       title: '操作',
       key: 'actions',
-      width: 190,
+      width: 185,
       render: (_, record) => (
         <Space size={4}>
           <Tooltip title="詳細 / 圖片預覽">
             <Button size="small" icon={<EyeOutlined />} onClick={() => setDetailItem(record)} />
           </Tooltip>
           <Tooltip title="編輯">
-            <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
+            <Button size="small" icon={<EditOutlined />} onClick={() => setEditItem(record)} />
           </Tooltip>
           {record.status === '待領取' && (
             <>
               <Tooltip title="發送通知">
-                <Button size="small" icon={<BellOutlined />} onClick={() => sendNotify(record)} />
+                <Button size="small" icon={<BellOutlined />}
+                  onClick={() => setPendingAction({ type: 'notify', item: record })} />
               </Tooltip>
-              <Tooltip title="已領取">
+              <Tooltip title="已領取（填寫後確認）">
                 <Button size="small" type="primary" icon={<CheckOutlined />}
-                  onClick={() => updateStatus(record, '已領取')} />
+                  onClick={() => setPickupItem(record)} />
               </Tooltip>
-              <Tooltip title="已退回">
+              <Tooltip title="退回">
                 <Button size="small" danger icon={<RollbackOutlined />}
-                  onClick={() => updateStatus(record, '已退回')} />
+                  onClick={() => setPendingAction({ type: 'return', item: record })} />
               </Tooltip>
             </>
           )}
-          <Popconfirm title="確定刪除？" onConfirm={() => deleteItem(record.id)}>
-            <Button size="small" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
+          <Tooltip title="刪除">
+            <Button size="small" danger icon={<DeleteOutlined />}
+              onClick={() => setPendingAction({ type: 'delete', item: record })} />
+          </Tooltip>
         </Space>
       ),
     },
   ]
+
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -322,17 +344,11 @@ export default function MailTable({ items, onRefresh }: Props) {
             <Space wrap>
               <span>已選取 <strong>{selectedRowKeys.length}</strong> 筆</span>
               <Button size="small" icon={<BellOutlined />} loading={batchLoading}
-                onClick={() => batchAction('notify')}>
-                批量通知（待領取）
-              </Button>
+                onClick={() => batchAction('notify')}>批量通知（待領取）</Button>
               <Button size="small" type="primary" icon={<CheckOutlined />} loading={batchLoading}
-                onClick={() => batchAction('pickup')}>
-                批量已領取
-              </Button>
+                onClick={() => batchAction('pickup')}>批量已領取</Button>
               <Button size="small" icon={<RollbackOutlined />} loading={batchLoading}
-                onClick={() => batchAction('return')}>
-                批量已退回
-              </Button>
+                onClick={() => batchAction('return')}>批量已退回</Button>
               <Popconfirm title={`確定刪除 ${selectedRowKeys.length} 筆？`}
                 onConfirm={() => batchAction('delete')}>
                 <Button size="small" danger icon={<DeleteOutlined />} loading={batchLoading}>
@@ -347,136 +363,39 @@ export default function MailTable({ items, onRefresh }: Props) {
         />
       )}
 
-      {/* 篩選列 */}
-      <Space style={{ marginBottom: 12 }} wrap>
-        <Input.Search
-          placeholder="搜尋追蹤碼 / 收件人"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{ width: 220 }}
-          allowClear
-        />
-        <Select placeholder="狀態" value={filterStatus || undefined}
-          onChange={setFilterStatus} allowClear style={{ width: 110 }}
-          options={[{ value: '待領取' }, { value: '已領取' }, { value: '已退回' }]} />
-        <Select placeholder="類型" value={filterType || undefined}
-          onChange={setFilterType} allowClear style={{ width: 110 }}
-          options={[{ value: '普通' }, { value: '掛號' }, { value: '公文' }, { value: '包裹' }]} />
-        <span style={{ color: '#888' }}>共 {filtered.length} 筆</span>
-      </Space>
-
       <Table
-        dataSource={filtered}
+        dataSource={computedItems}
         columns={columns}
         rowKey="id"
         size="small"
         rowSelection={rowSelection}
         pagination={{ pageSize: 20, showSizeChanger: true, showTotal: t => `共 ${t} 筆` }}
-        onRow={record => ({ style: deadlineColor(record) })}
-        scroll={{ x: 1100 }}
+        onRow={record => ({ style: deadlineStyle(record) })}
+        scroll={{ x: 1150 }}
       />
 
-      {/* 編輯 Modal */}
-      <Modal title="編輯郵件" open={!!editingItem} onOk={saveEdit}
-        onCancel={() => { setEditingItem(null); setEditPhotoFile(null); setEditPhotoPreview(null); setEditPhotoOcrText('') }}
-        okText="儲存" cancelText="取消">
-        <Form form={editForm} layout="vertical">
-          <Space style={{ width: '100%' }}>
-            <Form.Item name="recipientName" label="收件人姓名" style={{ flex: 1 }}>
-              <Input />
-            </Form.Item>
-            <Form.Item name="recipientEmail" label="收件人 Email" style={{ flex: 1 }}>
-              <Input />
-            </Form.Item>
-          </Space>
-          <Form.Item name="pickupMethod" label="領取方式">
-            <Select allowClear placeholder="請選擇領取方式" options={[
-              { value: '自行領取', label: '自行領取' },
-              { value: '代收通知', label: '代收通知' },
-              { value: '付費寄回', label: '付費寄回' },
-              { value: '說明告知', label: '說明告知' },
-              { value: '其他', label: '其他' },
-            ]} />
-          </Form.Item>
-          <Space style={{ width: '100%' }}>
-            <Form.Item name="pickupPerson" label="領取人" style={{ flex: 1 }}>
-              <Input />
-            </Form.Item>
-            <Form.Item name="pickupDate" label="領取日期" style={{ flex: 1 }}>
-              <DatePicker style={{ width: '100%' }} />
-            </Form.Item>
-          </Space>
-          <Space style={{ width: '100%' }}>
-            <Form.Item name="mailType" label="類型" style={{ width: 120 }}>
-              <Select options={[{ value: '普通' }, { value: '掛號' }, { value: '公文' }, { value: '包裹' }]} />
-            </Form.Item>
-            <Form.Item name="deadlineDays" label="期限（天）" style={{ width: 130 }}>
-              <InputNumber min={1} max={365} style={{ width: '100%' }} />
-            </Form.Item>
-          </Space>
-          <Form.Item name="notes" label="備註">
-            <Input.TextArea rows={2} />
-          </Form.Item>
-        </Form>
+      {/* ── Modals ────────────────────────────────────────────────────── */}
 
-        <Divider style={{ margin: '12px 0' }}>貨物照片</Divider>
-        <Space align="start" style={{ marginBottom: 8 }}>
-          <Upload
-            accept="image/*"
-            showUploadList={false}
-            beforeUpload={async file => {
-              setEditPhotoFile(file)
-              const reader = new FileReader()
-              reader.onload = e => setEditPhotoPreview(e.target?.result as string)
-              reader.readAsDataURL(file)
-              // 自動 OCR
-              setEditPhotoOcrLoading(true)
-              try {
-                const fd = new FormData()
-                fd.append('file', file)
-                const res = await fetch('/api/ocr', { method: 'POST', body: fd })
-                const data = await res.json()
-                if (data.rawText) setEditPhotoOcrText(data.rawText)
-              } catch { /* silent */ } finally {
-                setEditPhotoOcrLoading(false)
-              }
-              return false
-            }}
-          >
-            <Button icon={<UploadOutlined />}>
-              {editPhotoPreview ? '更換照片' : '新增照片'}
-            </Button>
-          </Upload>
-          {editPhotoPreview && (
-            <div>
-              <Image
-                src={editPhotoPreview}
-                width={120}
-                height={90}
-                style={{ objectFit: 'cover', borderRadius: 6 }}
-                alt="貨物照片預覽"
-              />
-              {editPhotoFile && (
-                <div style={{ fontSize: 11, color: '#1677ff', marginTop: 2 }}>新照片（待儲存）</div>
-              )}
-            </div>
-          )}
-        </Space>
-        <Collapse ghost items={[{
-          key: 'ocr',
-          label: editPhotoOcrLoading ? '⏳ OCR 辨識中...' : '照片文字備註（OCR 結果 / 可手動編輯）',
-          children: (
-            <Input.TextArea
-              rows={4}
-              placeholder="上傳照片後自動填入 OCR 結果，也可手動輸入，方便複製填入上方欄位"
-              value={editPhotoOcrText}
-              onChange={e => setEditPhotoOcrText(e.target.value)}
-            />
-          ),
-        }]} />
-      </Modal>
+      <ConfirmActionModal
+        action={pendingAction}
+        loading={actionLoading}
+        onConfirm={handleConfirmAction}
+        onCancel={() => setPendingAction(null)}
+      />
 
-      {/* 詳細 / 圖片預覽 Drawer */}
+      <PickupModal
+        item={pickupItem}
+        onSaved={() => { setPickupItem(null); onRefresh() }}
+        onCancel={() => setPickupItem(null)}
+      />
+
+      <EditMailModal
+        item={editItem}
+        onSaved={() => { setEditItem(null); onRefresh() }}
+        onCancel={() => setEditItem(null)}
+      />
+
+      {/* ── Detail Drawer ─────────────────────────────────────────────── */}
       <Drawer
         title={`郵件詳細 — ${detailItem?.trackingCode}`}
         open={!!detailItem}
@@ -521,99 +440,66 @@ export default function MailTable({ items, onRefresh }: Props) {
                   <Space wrap>
                     {detailItem.photoPath && (
                       <div style={{ textAlign: 'center' }}>
-                        <Image
-                          src={detailItem.photoPath}
-                          width={200}
-                          height={160}
+                        <Image src={detailItem.photoPath} width={200} height={160}
                           style={{ objectFit: 'cover', borderRadius: 8, cursor: 'pointer' }}
-                          alt="貨物照片"
-                        />
+                          alt="貨物照片" />
                         <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>貨物照片</div>
                       </div>
                     )}
                     {detailItem.listImagePath && (
                       <div style={{ textAlign: 'center' }}>
-                        <Image
-                          src={detailItem.listImagePath}
-                          width={200}
-                          height={160}
+                        <Image src={detailItem.listImagePath} width={200} height={160}
                           style={{ objectFit: 'cover', borderRadius: 8, cursor: 'pointer' }}
-                          alt="簽收清單"
-                        />
+                          alt="簽收清單" />
                         <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>簽收清單</div>
                       </div>
                     )}
                   </Space>
                 </Image.PreviewGroup>
                 {detailItem.photoPath && (
-                  <Collapse
-                    ghost
-                    style={{ marginTop: 8 }}
-                    items={[{
-                      key: 'photo-ocr',
-                      label: '貨物照片 OCR 文字',
-                      children: (
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                          <Button
-                            size="small"
-                            loading={photoOcrLoading}
-                            onClick={async () => {
-                              setPhotoOcrLoading(true)
-                              try {
-                                const imgRes = await fetch(detailItem.photoPath!)
-                                const blob = await imgRes.blob()
-                                const file = new File([blob], 'photo.jpg', { type: blob.type })
-                                const fd = new FormData()
-                                fd.append('file', file)
-                                const res = await fetch('/api/ocr', { method: 'POST', body: fd })
-                                const data = await res.json()
-                                if (data.rawText) {
-                                  setPhotoOcrEdit(data.rawText)
-                                } else if (data.error) {
-                                  message.warning(data.error)
-                                }
-                              } catch {
-                                message.error('OCR 執行失敗')
-                              } finally {
-                                setPhotoOcrLoading(false)
-                              }
-                            }}
-                          >
-                            對照片執行 OCR
-                          </Button>
-                          <Input.TextArea
-                            rows={4}
-                            placeholder="點擊上方按鈕對照片執行 OCR，結果會顯示在這裡，也可手動編輯"
-                            value={photoOcrEdit}
-                            onChange={e => setPhotoOcrEdit(e.target.value)}
-                          />
-                          <Button
-                            size="small"
-                            type="primary"
-                            loading={photoOcrSaving}
-                            disabled={!photoOcrEdit}
-                            onClick={async () => {
-                              setPhotoOcrSaving(true)
-                              const res = await fetch(`/api/items/${detailItem.id}`, {
-                                method: 'PUT',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ photoOcrText: photoOcrEdit }),
-                              })
+                  <Collapse ghost style={{ marginTop: 8 }} items={[{
+                    key: 'photo-ocr',
+                    label: '貨物照片 OCR 文字',
+                    children: (
+                      <Space direction="vertical" style={{ width: '100%' }}>
+                        <Button size="small" loading={photoOcrLoading}
+                          onClick={async () => {
+                            setPhotoOcrLoading(true)
+                            try {
+                              const imgRes = await fetch(detailItem.photoPath!)
+                              const blob = await imgRes.blob()
+                              const file = new File([blob], 'photo.jpg', { type: blob.type })
+                              const text = await mailApi.ocr(file)
+                              if (text) setPhotoOcrEdit(text)
+                              else message.warning('OCR 無法辨識')
+                            } catch { message.error('OCR 執行失敗') }
+                            finally { setPhotoOcrLoading(false) }
+                          }}>
+                          對照片執行 OCR
+                        </Button>
+                        <Input.TextArea rows={4}
+                          placeholder="點擊上方按鈕對照片執行 OCR，結果會顯示在這裡，也可手動編輯"
+                          value={photoOcrEdit}
+                          onChange={e => setPhotoOcrEdit(e.target.value)} />
+                        <Button size="small" type="primary" loading={photoOcrSaving}
+                          disabled={!photoOcrEdit}
+                          onClick={async () => {
+                            setPhotoOcrSaving(true)
+                            try {
+                              await mailApi.put(detailItem.id, { photoOcrText: photoOcrEdit })
+                              message.success('已儲存')
+                              onRefresh()
+                            } catch (e: unknown) {
+                              message.error(e instanceof Error ? e.message : '儲存失敗')
+                            } finally {
                               setPhotoOcrSaving(false)
-                              if (res.ok) {
-                                message.success('已儲存')
-                                onRefresh()
-                              } else {
-                                message.error('儲存失敗')
-                              }
-                            }}
-                          >
-                            儲存 OCR 文字
-                          </Button>
-                        </Space>
-                      ),
-                    }]}
-                  />
+                            }
+                          }}>
+                          儲存 OCR 文字
+                        </Button>
+                      </Space>
+                    ),
+                  }]} />
                 )}
               </>
             )}
@@ -621,22 +507,18 @@ export default function MailTable({ items, onRefresh }: Props) {
             {detailItem.ocrRawText && (
               <>
                 <Divider style={{ marginBottom: 8 }} />
-                <Collapse
-                  ghost
-                  items={[{
-                    key: 'ocr',
-                    label: 'OCR 原始文字',
-                    children: (
-                      <pre style={{
-                        background: '#f5f5f5', padding: 12, borderRadius: 8,
-                        fontSize: 11, maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap',
-                        margin: 0,
-                      }}>
-                        {detailItem.ocrRawText}
-                      </pre>
-                    ),
-                  }]}
-                />
+                <Collapse ghost items={[{
+                  key: 'ocr',
+                  label: 'OCR 原始文字',
+                  children: (
+                    <pre style={{
+                      background: '#f5f5f5', padding: 12, borderRadius: 8, fontSize: 11,
+                      maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap', margin: 0,
+                    }}>
+                      {detailItem.ocrRawText}
+                    </pre>
+                  ),
+                }]} />
               </>
             )}
           </>
@@ -644,4 +526,4 @@ export default function MailTable({ items, onRefresh }: Props) {
       </Drawer>
     </>
   )
-}
+})

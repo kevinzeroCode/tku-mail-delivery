@@ -5,7 +5,7 @@ import {
   Modal, Form, InputNumber, Input, Divider, message, Tooltip,
 } from 'antd'
 import {
-  PlusOutlined, ReloadOutlined, SettingOutlined, MailOutlined, LockOutlined,
+  PlusOutlined, ReloadOutlined, SettingOutlined, MailOutlined, LockOutlined, LogoutOutlined,
 } from '@ant-design/icons'
 import MailTable from '@/components/MailTable'
 import AddMailModal from '@/components/AddMailModal'
@@ -35,6 +35,12 @@ export default function AdminPage() {
     if (sessionStorage.getItem(SESSION_KEY) === 'true') setAuthed(true)
     setCheckingAuth(false)
   }, [])
+
+  const handleLogout = () => {
+    sessionStorage.removeItem(SESSION_KEY)
+    setAuthed(false)
+    setPasswordInput('')
+  }
 
   const handleLogin = async () => {
     const res = await fetch('/api/auth', {
@@ -159,6 +165,9 @@ export default function AdminPage() {
             style={{ background: '#fff', color: '#1677ff' }}>
             新增郵件
           </Button>
+          <Tooltip title="登出">
+            <Button icon={<LogoutOutlined />} onClick={handleLogout} style={{ color: '#fff' }} type="text" />
+          </Tooltip>
         </Space>
       </Header>
 

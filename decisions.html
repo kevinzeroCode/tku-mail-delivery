@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>郵件收發管理 — Architectural Decisions</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 860px; margin: 40px auto; padding: 0 24px; color: #222; }
+  h1 { border-bottom: 2px solid #1677ff; padding-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 32px; }
+  th { background: #f0f5ff; text-align: left; padding: 8px 12px; border: 1px solid #d0d0d0; }
+  td { padding: 8px 12px; border: 1px solid #d0d0d0; vertical-align: top; }
+  .adopt { color: #389e0d; font-weight: 600; }
+  .modify { color: #d46b08; font-weight: 600; }
+  .reject { color: #cf1322; font-weight: 600; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+  .critical { background: #fff1f0; color: #cf1322; }
+  .warning  { background: #fffbe6; color: #d46b08; }
+  .note     { background: #f0f5ff; color: #1677ff; }
+</style>
+</head>
+<body>
+<h1>Architectural Decisions — 郵件收發管理系統</h1>
+<p><em>Last reviewed: 2026-04-09 · Reviewer: Gemini (via ai-review skill)</em></p>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:60px">ID</th>
+      <th style="width:120px">Decision</th>
+      <th style="width:80px">Status</th>
+      <th>Rationale &amp; Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>D1</td>
+      <td>Component State Structure</td>
+      <td><span class="modify">MODIFY</span></td>
+      <td>
+        <strong>Original:</strong> Flat 12+ useState calls inside one MailTable component.<br>
+        <strong>Change (2026-04-09):</strong> Extracted modals into standalone memoized components
+        (<code>ConfirmActionModal</code>, <code>PickupModal</code>, <code>EditMailModal</code>).
+        Each modal manages its own internal state (form, loading). MailTable retains only
+        "which modal is open" state and batch/row-selection state.<br>
+        <span class="badge warning">Why:</span> 12+ states in one component caused hard-to-track side effects
+        and unnecessary re-renders across unrelated UI sections.
+      </td>
+    </tr>
+    <tr>
+      <td>D4</td>
+      <td>Batch Operation Error Handling</td>
+      <td><span class="modify">MODIFY</span></td>
+      <td>
+        <strong>Original:</strong> <code>Promise.all</code> — fails fast; one failure aborts all remaining items.<br>
+        <strong>Change (2026-04-09):</strong> Replaced with <code>Promise.allSettled</code>. Results are counted
+        and reported via <code>notification.warning</code> ("成功 N 筆，失敗 M 筆") so operators know
+        exactly which items need attention.<br>
+        <span class="badge critical">Why:</span> With 50 items, one transient failure previously left the
+        system in an inconsistent state with no per-item visibility.
+      </td>
+    </tr>
+    <tr>
+      <td>D6</td>
+      <td>Column Filter Date Computation</td>
+      <td><span class="modify">MODIFY</span></td>
+      <td>
+        <strong>Original:</strong> <code>dayjs()</code> called inside <code>onFilter</code> — executed per-row
+        on every keystroke.<br>
+        <strong>Change (2026-04-09):</strong> <code>useMemo</code> pre-computes <code>_receivedFmt</code> and
+        <code>_deadlineFmt</code> strings when the <code>items</code> prop changes. <code>onFilter</code>
+        performs a simple string <code>includes()</code>.<br>
+        <span class="badge warning">Why:</span> O(N) date parsing per keystroke causes UI lag on large datasets.
+        Pre-computing shifts cost to data-load time (once), not filter time (continuous).
+      </td>
+    </tr>
+    <tr>
+      <td>D7</td>
+      <td>Modal / Form Lifecycle</td>
+      <td><span class="modify">MODIFY</span></td>
+      <td>
+        <strong>Original:</strong> Mixed lifecycle — <code>pickupForm</code> used <code>destroyOnClose</code>
+        but <code>editForm</code> did not, risking stale field values between different mail items.<br>
+        <strong>Change (2026-04-09):</strong> All modals use <code>destroyOnClose</code>. Extracted modals
+        create their own <code>Form.useForm()</code> internally and use <code>initialValues</code>
+        (derived from <code>item</code> prop) which are applied fresh on each mount.<br>
+        <span class="badge note">Why:</span> Consistent teardown eliminates "ghost data" from previously
+        viewed items appearing in a newly-opened edit form.
+      </td>
+    </tr>
+    <tr>
+      <td>D8</td>
+      <td>API Service Layer</td>
+      <td><span class="adopt">ADOPT</span></td>
+      <td>
+        <strong>Decision (2026-04-09):</strong> All <code>fetch()</code> calls extracted into
+        <code>src/services/mail.ts</code> (<code>mailApi.notify</code>, <code>mailApi.put</code>,
+        <code>mailApi.delete</code>, <code>mailApi.uploadPhoto</code>, <code>mailApi.ocr</code>).<br>
+        UI components import <code>mailApi</code> — no inline <code>fetch()</code> in JSX files.<br>
+        <span class="badge note">Why:</span> Inlined fetch calls make components impossible to unit test
+        without heavy <code>global.fetch</code> mocking. A dedicated service module can be mocked at the
+        module boundary. Also centralises error-response parsing (<code>unwrap()</code> helper).
+      </td>
+    </tr>
+  </tbody>
+</table>
+</body>
+</html>
