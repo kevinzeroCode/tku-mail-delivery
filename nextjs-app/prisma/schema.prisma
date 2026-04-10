@@ -25,13 +25,46 @@ model MailItem {
   pickupMethod     String?                         // 領取方式：自行領取/代收通知/付費寄回/說明告知/其他
   pickupPerson     String?                         // 實際領取人
   pickupDate       DateTime?
+  returnDate       DateTime?                       // 退回日期時間（郵務士退回）
   status           String    @default("待領取")    // 待領取/已領取/已退回
   notes            String?                         // 備註
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
+  requests         MailRequest[]
+
   @@index([trackingCode])
   @@index([status])
+}
+
+model UserProfile {
+  id            Int      @id @default(autoincrement())
+  email         String   @unique
+  name          String?
+  studentId     String?
+  defaultPickup String?             // 預設領取方式
+  notifyEmail   String?             // 通知 Email（可自訂，預設同 O365）
+  schoolStatus  String?             // 在學中/已畢業/休學中/在職中/已離退
+  notes         String?             // 給收發室的補充說明
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model MailRequest {
+  id          Int       @id @default(autoincrement())
+  mailItemId  Int
+  mailItem    MailItem  @relation(fields: [mailItemId], references: [id], onDelete: Cascade)
+  userEmail   String
+  type        String    // reject_return | change_pickup | wrong_recipient | pickup_signed
+  requestData String?   // JSON 額外資料
+  status      String    @default("待處理")  // 待處理/已核准/已拒絕
+  adminNote   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([mailItemId])
+  @@index([status])
+  @@index([userEmail])
 }
 
 model Setting {

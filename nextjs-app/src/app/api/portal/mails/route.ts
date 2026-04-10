@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 
-// GET /api/query?code=123456 — 公開查詢（只回傳必要欄位）
+// GET /api/portal/mails?email=xxx
+// 回傳：待領取（所有）＋ 已領取/已退回（三個月以內），最多 50 筆
 export async function GET(req: NextRequest) {
-  const code = new URL(req.url).searchParams.get('code')?.trim()
-
-  if (!code) return NextResponse.json({ error: '請輸入查詢編號' }, { status: 400 })
+  const email = new URL(req.url).searchParams.get('email')?.trim()
+  if (!email) return NextResponse.json({ error: '未提供 email' }, { status: 400 })
 
   const threeMonthsAgo = new Date()
   threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
 
   const items = await prisma.mailItem.findMany({
     where: {
-      trackingCode: { contains: code },
+      recipientEmail: email,
       OR: [
         { status: '待領取' },
         { status: { in: ['已領取', '已退回'] }, updatedAt: { gte: threeMonthsAgo } },
@@ -23,18 +23,23 @@ export async function GET(req: NextRequest) {
       trackingCode: true,
       mailType: true,
       receivedDate: true,
+      deadlineDays: true,
       status: true,
       notificationSent: true,
-      notificationDate: true,
-      deadlineDays: true,
       pickupDate: true,
       returnDate: true,
+      pickupMethod: true,
+      pickupPerson: true,
       notes: true,
+      updatedAt: true,
+      requests: {
+        select: { id: true, type: true, status: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+      },
     },
     orderBy: { receivedDate: 'desc' },
+    take: 50,
   })
-
-  if (items.length === 0) return NextResponse.json({ error: '查無此編號' }, { status: 404 })
 
   return NextResponse.json(items)
 }

@@ -14,7 +14,7 @@ const { Title, Text } = Typography
 
 type QueryItem = Pick<MailItem,
   'id' | 'trackingCode' | 'mailType' | 'receivedDate' | 'status' |
-  'notificationSent' | 'notificationDate' | 'deadlineDays' | 'pickupDate' | 'notes'>
+  'notificationSent' | 'notificationDate' | 'deadlineDays' | 'pickupDate' | 'returnDate' | 'notes'>
 
 export default function QueryPage() {
   const [code, setCode] = useState('')
@@ -45,13 +45,17 @@ export default function QueryPage() {
       <Header style={{ background: '#1677ff', display: 'flex', alignItems: 'center', gap: 12 }}>
         <MailOutlined style={{ color: '#fff', fontSize: 24 }} />
         <Title level={4} style={{ color: '#fff', margin: 0, flex: 1 }}>郵件收發查詢系統</Title>
+        <Button type="text" style={{ color: '#fff' }} href="/portal">用戶自助服務</Button>
         <Button type="text" style={{ color: '#fff' }} href="/admin">管理後台</Button>
       </Header>
 
       <Content style={{ padding: '40px 24px', maxWidth: 640, margin: '0 auto', width: '100%' }}>
         <Card>
           <Title level={5} style={{ marginTop: 0 }}>查詢郵件狀態</Title>
-          <Text type="secondary">請輸入郵件追蹤碼（簽收清單上的前 6-8 碼數字）</Text>
+          <Text type="secondary">
+            請輸入郵件追蹤碼（簽收清單上的前 6-8 碼數字）。
+            僅顯示未領取及三個月以內已完成郵件。
+          </Text>
 
           <Space.Compact style={{ width: '100%', marginTop: 16 }}>
             <Input
@@ -94,8 +98,13 @@ export default function QueryPage() {
                 </Descriptions.Item>
                 <Descriptions.Item label="狀態"><StatusBadge status={item.status} /></Descriptions.Item>
                 {item.status === '已領取' && item.pickupDate && (
-                  <Descriptions.Item label="領取日期">
-                    {dayjs(item.pickupDate).format('YYYY 年 MM 月 DD 日')}
+                  <Descriptions.Item label="領取日期時間">
+                    {dayjs(item.pickupDate).format('YYYY 年 MM 月 DD 日 HH:mm')}
+                  </Descriptions.Item>
+                )}
+                {item.status === '已退回' && item.returnDate && (
+                  <Descriptions.Item label="退回日期時間">
+                    {dayjs(item.returnDate).format('YYYY 年 MM 月 DD 日 HH:mm')}
                   </Descriptions.Item>
                 )}
                 {item.notes && (

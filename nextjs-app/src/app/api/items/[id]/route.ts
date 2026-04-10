@@ -32,10 +32,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const updateData: Record<string, unknown> = {}
 
-    if (body.status !== undefined) updateData.status = body.status
+    if (body.status !== undefined) {
+      updateData.status = body.status
+      // 自動記錄退回時間（若前端未明確傳入 returnDate）
+      if (body.status === '已退回' && body.returnDate === undefined) {
+        updateData.returnDate = new Date()
+      }
+    }
     if (body.pickupMethod !== undefined) updateData.pickupMethod = body.pickupMethod
     if (body.pickupPerson !== undefined) updateData.pickupPerson = body.pickupPerson
     if (body.pickupDate !== undefined) updateData.pickupDate = body.pickupDate ? new Date(body.pickupDate) : null
+    if (body.returnDate !== undefined) updateData.returnDate = body.returnDate ? new Date(body.returnDate) : null
     if (body.recipientName !== undefined) updateData.recipientName = body.recipientName
     if (body.recipientEmail !== undefined) updateData.recipientEmail = body.recipientEmail
     if (body.mailType !== undefined) updateData.mailType = body.mailType

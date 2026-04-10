@@ -424,8 +424,13 @@ export default memo(function MailTable({ items, onRefresh }: Props) {
                 <Descriptions.Item label="領取人">{detailItem.pickupPerson}</Descriptions.Item>
               )}
               {detailItem.pickupDate && (
-                <Descriptions.Item label="領取日期">
-                  {dayjs(detailItem.pickupDate).format('YYYY/MM/DD')}
+                <Descriptions.Item label="領取日期時間">
+                  {dayjs(detailItem.pickupDate).format('YYYY/MM/DD HH:mm')}
+                </Descriptions.Item>
+              )}
+              {detailItem.returnDate && (
+                <Descriptions.Item label="退回日期時間">
+                  {dayjs(detailItem.returnDate).format('YYYY/MM/DD HH:mm')}
                 </Descriptions.Item>
               )}
               {detailItem.notes && (

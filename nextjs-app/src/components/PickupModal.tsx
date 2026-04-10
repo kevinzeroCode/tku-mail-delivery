@@ -79,8 +79,8 @@ export const PickupModal = memo(function PickupModal({ item, onSaved, onCancel }
               <Form.Item name="pickupPerson" label="領取人" style={{ flex: 1, marginBottom: 0 }}>
                 <Input placeholder="實際領取人姓名" />
               </Form.Item>
-              <Form.Item name="pickupDate" label="領取日期" style={{ flex: 1, marginBottom: 0 }}>
-                <DatePicker style={{ width: '100%' }} />
+              <Form.Item name="pickupDate" label="領取日期時間" style={{ flex: 1, marginBottom: 0 }}>
+                <DatePicker showTime={{ format: 'HH:mm' }} format="YYYY/MM/DD HH:mm" style={{ width: '100%' }} />
               </Form.Item>
             </Space>
           </Form>

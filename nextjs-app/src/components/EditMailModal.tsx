@@ -39,6 +39,7 @@ export const EditMailModal = memo(function EditMailModal({ item, onSaved, onCanc
       const body: Record<string, unknown> = {
         ...values,
         pickupDate: values.pickupDate ? values.pickupDate.toISOString() : null,
+        returnDate: values.returnDate ? values.returnDate.toISOString() : null,
         photoOcrText: ocrText || null,
       }
       if (photoFile) {
@@ -79,6 +80,7 @@ export const EditMailModal = memo(function EditMailModal({ item, onSaved, onCanc
               deadlineDays: item.deadlineDays,
               notes: item.notes,
               pickupDate: item.pickupDate ? dayjs(item.pickupDate) : null,
+              returnDate: item.returnDate ? dayjs(item.returnDate) : null,
             }}
           >
             <Space style={{ width: '100%' }} align="start">
@@ -96,10 +98,13 @@ export const EditMailModal = memo(function EditMailModal({ item, onSaved, onCanc
               <Form.Item name="pickupPerson" label="領取人" style={{ flex: 1 }}>
                 <Input />
               </Form.Item>
-              <Form.Item name="pickupDate" label="領取日期" style={{ flex: 1 }}>
-                <DatePicker style={{ width: '100%' }} />
+              <Form.Item name="pickupDate" label="領取日期時間" style={{ flex: 1 }}>
+                <DatePicker showTime={{ format: 'HH:mm' }} format="YYYY/MM/DD HH:mm" style={{ width: '100%' }} />
               </Form.Item>
             </Space>
+            <Form.Item name="returnDate" label="退回日期時間">
+              <DatePicker showTime={{ format: 'HH:mm' }} format="YYYY/MM/DD HH:mm" style={{ width: '100%' }} />
+            </Form.Item>
             <Space style={{ width: '100%' }} align="start">
               <Form.Item name="mailType" label="類型" style={{ width: 120 }}>
                 <Select options={[

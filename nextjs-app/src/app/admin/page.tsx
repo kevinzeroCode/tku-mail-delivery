@@ -2,14 +2,16 @@
 import { useEffect, useState } from 'react'
 import {
   Layout, Card, Button, Typography, Space, Spin, Alert,
-  Modal, Form, InputNumber, Input, Divider, message, Tooltip,
+  Modal, Form, InputNumber, Input, Divider, message, Tooltip, Tabs, Badge,
 } from 'antd'
 import {
   PlusOutlined, ReloadOutlined, SettingOutlined, MailOutlined, LockOutlined, LogoutOutlined,
+  FileDoneOutlined,
 } from '@ant-design/icons'
 import MailTable from '@/components/MailTable'
 import AddMailModal from '@/components/AddMailModal'
-import type { MailItem } from '@/lib/types'
+import RequestsPanel from '@/components/RequestsPanel'
+import type { MailItem, MailRequest } from '@/lib/types'
 
 const { Header, Content } = Layout
 const { Title } = Typography
@@ -22,9 +24,10 @@ export default function AdminPage() {
   const [passwordError, setPasswordError] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
 
-  const [items, setItems] = useState<MailItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [items,    setItems]    = useState<MailItem[]>([])
+  const [requests, setRequests] = useState<MailRequest[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [error,    setError]    = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settings, setSettings] = useState<Record<string, string>>({})
@@ -60,11 +63,15 @@ export default function AdminPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/items')
-      if (!res.ok) throw new Error('API 回應錯誤')
-      const data = await res.json()
-      if (!Array.isArray(data)) throw new Error('資料格式錯誤')
-      setItems(data)
+      const [itemsRes, reqsRes] = await Promise.all([
+        fetch('/api/items'),
+        fetch('/api/admin/requests'),
+      ])
+      if (!itemsRes.ok) throw new Error('API 回應錯誤')
+      const [itemsData, reqsData] = await Promise.all([itemsRes.json(), reqsRes.json()])
+      if (!Array.isArray(itemsData)) throw new Error('資料格式錯誤')
+      setItems(itemsData)
+      setRequests(Array.isArray(reqsData) ? reqsData : [])
     } catch {
       setError('載入失敗，請重新整理')
     } finally {
@@ -110,14 +117,15 @@ export default function AdminPage() {
   }
 
   const counts = {
-    total: items.length,
-    pending: items.filter(i => i.status === '待領取').length,
-    overdue: items.filter(i => {
+    total:          items.length,
+    pending:        items.filter(i => i.status === '待領取').length,
+    overdue:        items.filter(i => {
       if (i.status !== '待領取') return false
       const deadline = new Date(i.receivedDate)
       deadline.setDate(deadline.getDate() + i.deadlineDays)
       return new Date() > deadline
     }).length,
+    pendingRequests: requests.filter(r => r.status === '待處理').length,
   }
 
   // ── 載入中 ──────────────────────────────────────────
@@ -189,11 +197,29 @@ export default function AdminPage() {
 
         {error && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
 
-        <Card>
-          {loading
-            ? <div style={{ textAlign: 'center', padding: 48 }}><Spin size="large" /></div>
-            : <MailTable items={items} onRefresh={fetchItems} />
-          }
+        <Card style={{ marginTop: 8 }}>
+          <Tabs
+            items={[
+              {
+                key: 'mails',
+                label: <><MailOutlined />郵件清單</>,
+                children: loading
+                  ? <div style={{ textAlign: 'center', padding: 48 }}><Spin size="large" /></div>
+                  : <MailTable items={items} onRefresh={fetchItems} />,
+              },
+              {
+                key: 'requests',
+                label: (
+                  <Badge count={counts.pendingRequests} size="small" offset={[6, 0]}>
+                    <FileDoneOutlined />申請處理
+                  </Badge>
+                ),
+                children: loading
+                  ? <div style={{ textAlign: 'center', padding: 48 }}><Spin size="large" /></div>
+                  : <RequestsPanel requests={requests} onRefresh={fetchItems} />,
+              },
+            ]}
+          />
         </Card>
       </Content>
 

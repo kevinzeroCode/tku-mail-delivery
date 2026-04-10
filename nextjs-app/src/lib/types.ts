@@ -18,10 +18,38 @@ export interface MailItem {
   pickupMethod: string | null
   pickupPerson: string | null
   pickupDate: string | null
+  returnDate: string | null
   status: MailStatus
   notes: string | null
   createdAt: string
   updatedAt: string
+}
+
+export type MailRequestType = 'reject_return' | 'change_pickup' | 'wrong_recipient' | 'pickup_signed'
+export type MailRequestStatus = '待處理' | '已核准' | '已拒絕'
+
+export interface UserProfile {
+  id: number | null
+  email: string
+  name: string | null
+  studentId: string | null
+  defaultPickup: string | null
+  notifyEmail: string | null
+  schoolStatus: string | null
+  notes: string | null
+}
+
+export interface MailRequest {
+  id: number
+  mailItemId: number
+  userEmail: string
+  type: MailRequestType
+  requestData: string | null
+  status: MailRequestStatus
+  adminNote: string | null
+  createdAt: string
+  updatedAt: string
+  mailItem?: { trackingCode: string; mailType: string; recipientName: string | null; status: string }
 }
 
 export interface OcrResult {
