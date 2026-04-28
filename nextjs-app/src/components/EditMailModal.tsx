@@ -73,6 +73,7 @@ export const EditMailModal = memo(function EditMailModal({ item, onSaved, onCanc
             layout="vertical"
             initialValues={{
               recipientName: item.recipientName,
+              foreignName: item.foreignName,
               recipientEmail: item.recipientEmail,
               pickupMethod: item.pickupMethod,
               pickupPerson: item.pickupPerson,
@@ -86,6 +87,9 @@ export const EditMailModal = memo(function EditMailModal({ item, onSaved, onCanc
             <Space style={{ width: '100%' }} align="start">
               <Form.Item name="recipientName" label="收件人姓名" style={{ flex: 1 }}>
                 <Input />
+              </Form.Item>
+              <Form.Item name="foreignName" label="外文姓名" style={{ flex: 1 }}>
+                <Input placeholder="英文 / 羅馬字姓名" />
               </Form.Item>
               <Form.Item name="recipientEmail" label="收件人 Email" style={{ flex: 1 }}>
                 <Input />

@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
           OR: [
             { trackingCode: { contains: search } },
             { recipientName: { contains: search } },
+            { foreignName: { contains: search } },
           ],
         }),
       },
@@ -52,6 +53,7 @@ export async function POST(req: NextRequest) {
         listImagePath: body.listImagePath ?? null,
         ocrRawText: body.ocrRawText ?? null,
         recipientName: body.recipientName ?? null,
+        foreignName: body.foreignName ?? null,
         recipientEmail: body.recipientEmail ?? null,
         pickupMethod: body.pickupMethod ?? null,
         deadlineDays: body.deadlineDays ?? fallbackDays,

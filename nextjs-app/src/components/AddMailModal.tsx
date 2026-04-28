@@ -192,6 +192,9 @@ export default function AddMailModal({ open, onClose, onCreated, defaultDeadline
             <Form.Item name="recipientName" label="收件人姓名" style={{ flex: 1 }}>
               <Input placeholder="姓名" />
             </Form.Item>
+            <Form.Item name="foreignName" label="外文姓名" style={{ flex: 1 }}>
+              <Input placeholder="英文 / 羅馬字姓名" />
+            </Form.Item>
             <Form.Item name="recipientEmail" label="收件人 Email" style={{ flex: 1 }}>
               <Input placeholder="用於 Teams 通知" />
             </Form.Item>

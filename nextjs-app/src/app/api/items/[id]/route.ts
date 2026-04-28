@@ -44,6 +44,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (body.pickupDate !== undefined) updateData.pickupDate = body.pickupDate ? new Date(body.pickupDate) : null
     if (body.returnDate !== undefined) updateData.returnDate = body.returnDate ? new Date(body.returnDate) : null
     if (body.recipientName !== undefined) updateData.recipientName = body.recipientName
+    if (body.foreignName !== undefined) updateData.foreignName = body.foreignName || null
     if (body.recipientEmail !== undefined) updateData.recipientEmail = body.recipientEmail
     if (body.mailType !== undefined) updateData.mailType = body.mailType
     if (body.deadlineDays !== undefined) {

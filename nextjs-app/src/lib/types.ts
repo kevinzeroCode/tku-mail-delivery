@@ -11,6 +11,7 @@ export interface MailItem {
   ocrRawText: string | null
   photoOcrText: string | null
   recipientName: string | null
+  foreignName: string | null
   recipientEmail: string | null
   notificationSent: boolean
   notificationDate: string | null

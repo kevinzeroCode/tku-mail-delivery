@@ -18,6 +18,7 @@ model MailItem {
   ocrRawText       String?                         // OCR 原始文字（簽收清單）
   photoOcrText     String?                         // 貨物照片備註文字
   recipientName    String?                         // 收件人姓名
+  foreignName      String?                         // 外文姓名（英文 / 羅馬字）
   recipientEmail   String?                         // 收件人 Email（發通知用）
   notificationSent Boolean   @default(false)
   notificationDate DateTime?

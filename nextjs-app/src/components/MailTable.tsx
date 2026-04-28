@@ -409,6 +409,9 @@ export default memo(function MailTable({ items, onRefresh }: Props) {
               <Descriptions.Item label="追蹤碼">{detailItem.trackingCode}</Descriptions.Item>
               <Descriptions.Item label="類型">{detailItem.mailType}</Descriptions.Item>
               <Descriptions.Item label="收件人">{detailItem.recipientName ?? '—'}</Descriptions.Item>
+              {detailItem.foreignName && (
+                <Descriptions.Item label="外文姓名">{detailItem.foreignName}</Descriptions.Item>
+              )}
               <Descriptions.Item label="Email">{detailItem.recipientEmail ?? '—'}</Descriptions.Item>
               <Descriptions.Item label="到件日期">
                 {dayjs(detailItem.receivedDate).format('YYYY/MM/DD HH:mm')}
