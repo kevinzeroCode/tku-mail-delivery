@@ -87,7 +87,7 @@ export default function MailRequestModal({ item, requestType, userEmail, onSaved
       okText="確認送出"
       cancelText="取消"
       confirmLoading={loading}
-      destroyOnClose
+      destroyOnHidden
       width={requestType === 'pickup_signed' ? 540 : 420}
     >
       {item && requestType && (

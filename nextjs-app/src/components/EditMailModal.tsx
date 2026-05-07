@@ -64,7 +64,7 @@ export const EditMailModal = memo(function EditMailModal({ item, onSaved, onCanc
       okText="儲存"
       cancelText="取消"
       confirmLoading={saving}
-      destroyOnClose
+      destroyOnHidden
     >
       {item && (
         <>

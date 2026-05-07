@@ -19,6 +19,7 @@ export interface MailItem {
   pickupMethod: string | null
   pickupPerson: string | null
   pickupDate: string | null
+  signaturePath: string | null
   returnDate: string | null
   status: MailStatus
   notes: string | null

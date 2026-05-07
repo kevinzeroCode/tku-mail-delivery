@@ -52,7 +52,7 @@ export const ConfirmActionModal = memo(function ConfirmActionModal({ action, loa
       okText={cfg?.okText}
       cancelText="取消"
       okButtonProps={{ danger: cfg?.danger, loading }}
-      destroyOnClose
+      destroyOnHidden
     >
       {action && (
         <>

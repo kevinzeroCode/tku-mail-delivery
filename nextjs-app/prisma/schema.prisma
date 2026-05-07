@@ -26,6 +26,7 @@ model MailItem {
   pickupMethod     String?                         // 領取方式：自行領取/代收通知/付費寄回/說明告知/其他
   pickupPerson     String?                         // 實際領取人
   pickupDate       DateTime?
+  signaturePath    String?                         // 領取簽名圖片路徑
   returnDate       DateTime?                       // 退回日期時間（郵務士退回）
   status           String    @default("待領取")    // 待領取/已領取/已退回
   notes            String?                         // 備註

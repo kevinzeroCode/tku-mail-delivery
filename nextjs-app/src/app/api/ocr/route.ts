@@ -55,10 +55,20 @@ export async function POST(req: NextRequest) {
     }
 
     if (!ocrRes.ok) {
+      const errText = await ocrRes.text().catch(() => '')
+      console.error('[ocr] OCR 服務異常，status:', ocrRes.status, '，body:', errText.slice(0, 300))
       return NextResponse.json({ error: 'OCR 服務異常' }, { status: 502 })
     }
 
-    const result = await ocrRes.json()
+    const rawBody = await ocrRes.text()
+    let result: { trackingCodes: string[]; rawText: string; lineCount: number }
+    try {
+      result = JSON.parse(rawBody)
+    } catch {
+      console.error('[ocr] OCR 回傳非 JSON，前 300 字：', rawBody.slice(0, 300))
+      return NextResponse.json({ error: 'OCR 服務回傳格式錯誤，請確認 Railway 服務狀態' }, { status: 502 })
+    }
+
     return NextResponse.json({ ...result, savedPath: savedFilename ? `/uploads/${savedFilename}` : null })
   } catch (e) {
     console.error('[POST /api/ocr]', e)

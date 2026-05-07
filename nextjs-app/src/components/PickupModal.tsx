@@ -1,8 +1,9 @@
 'use client'
-import { memo, useState } from 'react'
-import { Modal, Form, Descriptions, Select, Input, Space, DatePicker, message } from 'antd'
+import { memo, useRef, useState } from 'react'
+import { Modal, Form, Descriptions, Select, Input, Space, DatePicker, message, Typography } from 'antd'
 import dayjs from 'dayjs'
 import { mailApi } from '@/services/mail'
+import SignaturePad, { type SignaturePadRef } from './SignaturePad'
 import type { MailItem } from '@/lib/types'
 
 const PICKUP_METHODS = [
@@ -19,25 +20,51 @@ interface Props {
   onCancel: () => void
 }
 
+async function uploadSignature(dataUrl: string): Promise<string | null> {
+  try {
+    const blob = await fetch(dataUrl).then(r => r.blob())
+    const file = new File([blob], `sig_${Date.now()}.png`, { type: 'image/png' })
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch('/api/upload', { method: 'POST', body: fd })
+    if (!res.ok) return null
+    const data = await res.json()
+    return data.savedPath ?? null
+  } catch {
+    return null
+  }
+}
+
 export const PickupModal = memo(function PickupModal({ item, onSaved, onCancel }: Props) {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
+  const sigRef = useRef<SignaturePadRef>(null)
 
   const handleOk = async () => {
+    if (sigRef.current?.isEmpty()) {
+      message.error('請先完成簽名')
+      return
+    }
+
     setLoading(true)
     try {
       const values = await form.validateFields()
+
+      const signaturePath = sigRef.current
+        ? await uploadSignature(sigRef.current.toDataURL())
+        : null
+
       await mailApi.put(item!.id, {
         status: '已領取',
         pickupDate: values.pickupDate ? values.pickupDate.toISOString() : new Date().toISOString(),
         pickupMethod: values.pickupMethod ?? null,
         pickupPerson: values.pickupPerson ?? null,
+        signaturePath,
       })
       message.success('已標記為領取')
       onSaved()
     } catch (e: unknown) {
       if (e instanceof Error) message.error(e.message)
-      // AntD form validation errors are non-Error objects — silently ignore
     } finally {
       setLoading(false)
     }
@@ -52,7 +79,8 @@ export const PickupModal = memo(function PickupModal({ item, onSaved, onCancel }
       okText="確認領取"
       cancelText="取消"
       confirmLoading={loading}
-      destroyOnClose
+      destroyOnHidden
+      width={600}
     >
       {item && (
         <>
@@ -63,6 +91,7 @@ export const PickupModal = memo(function PickupModal({ item, onSaved, onCancel }
             <Descriptions.Item label="類型">{item.mailType}</Descriptions.Item>
             <Descriptions.Item label="收件人">{item.recipientName ?? '—'}</Descriptions.Item>
           </Descriptions>
+
           <Form
             form={form}
             layout="vertical"
@@ -84,6 +113,15 @@ export const PickupModal = memo(function PickupModal({ item, onSaved, onCancel }
               </Form.Item>
             </Space>
           </Form>
+
+          <div style={{ marginTop: 16 }}>
+            <Typography.Text strong>
+              領取人簽名 <Typography.Text type="danger">*</Typography.Text>
+            </Typography.Text>
+            <div style={{ marginTop: 8 }}>
+              <SignaturePad ref={sigRef} height={160} />
+            </div>
+          </div>
         </>
       )}
     </Modal>
