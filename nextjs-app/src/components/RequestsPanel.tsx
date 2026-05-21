@@ -11,7 +11,7 @@ import type { MailRequest, MailRequestType } from '@/lib/types'
 const TOKEN_KEY = 'admin_token'
 function authHeader(): Record<string, string> {
   if (typeof sessionStorage === 'undefined') return {}
-  const token = sessionStorage.getItem(TOKEN_KEY) ?? ''
+  const token = ''
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 

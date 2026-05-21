@@ -13,7 +13,7 @@ const TOKEN_KEY = 'admin_token'
 function authHeader(): Record<string, string> {
   // sessionStorage is only available in browser contexts
   if (typeof sessionStorage === 'undefined') return {}
-  const token = sessionStorage.getItem(TOKEN_KEY) ?? ''
+  const token = ''
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 

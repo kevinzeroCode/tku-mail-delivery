@@ -35,3 +35,12 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# TypeScript build cache
+**/*.tsbuildinfo
+
+# Archives
+*.zip
+
+# Local reference copy (not part of the repo)
+another workflow/

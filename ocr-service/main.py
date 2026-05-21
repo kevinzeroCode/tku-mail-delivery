@@ -29,8 +29,19 @@ app.add_middleware(
 )
 
 # 初始化 EasyOCR（第一次執行會下載模型，約 1-2 分鐘）
-logger.info("載入 OCR 模型中...")
-reader = easyocr.Reader(["ch_tra", "en"], gpu=False)  # 繁體中文 + 英文
+# 模型放在 EASYOCR_MODEL_DIR（Azure App Service 用 /home/site/easyocr 持久化），
+# 避免每次容器重啟都要重抓 100MB+ 模型。
+import os as _os
+_model_dir = _os.environ.get("EASYOCR_MODEL_DIR", "").strip() or None
+if _model_dir:
+    _os.makedirs(_model_dir, exist_ok=True)
+logger.info(f"載入 OCR 模型中... (model_storage_directory={_model_dir or 'default'})")
+reader = easyocr.Reader(
+    ["ch_tra", "en"],
+    gpu=False,
+    model_storage_directory=_model_dir,
+    download_enabled=True,
+)
 logger.info("OCR 模型載入完成")
 
 

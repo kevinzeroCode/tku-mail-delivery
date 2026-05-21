@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { requireAdminAuth } from '@/lib/admin-auth'
 
 // PUT /api/admin/requests/[id] — 核准或拒絕申請
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const authErr = requireAdminAuth(req)
-  if (authErr) return authErr
-
   try {
     const { id: idStr } = await params
     const id = parseInt(idStr, 10)

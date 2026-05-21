@@ -1,51 +1,54 @@
 'use client'
-// ╔══════════════════════════════════════════════════════════════════════════╗
-// ║  O365 Auth Placeholder — 待替換為 Microsoft MSAL                        ║
-// ║                                                                          ║
-// ║  Fork 後替換步驟：                                                       ║
-// ║  1. npm install @azure/msal-react @azure/msal-browser                   ║
-// ║  2. 在 layout 包裝 MsalProvider                                         ║
-// ║  3. 將此檔案的 usePortalAuth() 換成：                                   ║
-// ║       const { accounts } = useMsal()                                     ║
-// ║       const user = accounts[0]                                           ║
-// ║         ? { email: accounts[0].username,                                 ║
-// ║             displayName: accounts[0].name ?? '' }                        ║
-// ║         : null                                                            ║
-// ║  4. login() → instance.loginPopup(loginRequest)                          ║
-// ║  5. logout() → instance.logoutPopup()                                    ║
-// ╚══════════════════════════════════════════════════════════════════════════╝
-import { useState, useEffect } from 'react'
-
-const EMAIL_KEY = 'portal_email'
-const NAME_KEY  = 'portal_name'
+// MSAL Browser 整合 — 取代原本 sessionStorage 的 mock。
+// 用 loginRedirect 而非 loginPopup，避免 Guest user 在 popup 中遇到 consent 卡住的情況。
+import { useMsal, useIsAuthenticated } from '@azure/msal-react'
+import { InteractionStatus } from '@azure/msal-browser'
+import { loginRequest, readClaims, ADMIN_ROLE } from './msal-config'
 
 export interface PortalUser {
   email: string
   displayName: string
+  roles: string[]
 }
 
 export function usePortalAuth() {
-  const [user, setUser]       = useState<PortalUser | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { instance, accounts, inProgress } = useMsal()
+  const isAuthenticated = useIsAuthenticated()
 
-  useEffect(() => {
-    const email = sessionStorage.getItem(EMAIL_KEY)
-    const displayName = sessionStorage.getItem(NAME_KEY) ?? ''
-    if (email) setUser({ email, displayName })
-    setLoading(false)
-  }, [])
+  const account = accounts[0]
+  const user: PortalUser | null = account
+    ? (() => {
+        const c = readClaims(account)
+        return { email: c.email, displayName: c.displayName, roles: c.roles }
+      })()
+    : null
 
-  const login = (email: string, displayName: string) => {
-    sessionStorage.setItem(EMAIL_KEY, email)
-    sessionStorage.setItem(NAME_KEY, displayName)
-    setUser({ email, displayName })
+  const loading =
+    inProgress === InteractionStatus.Startup ||
+    inProgress === InteractionStatus.HandleRedirect
+
+  const login = async () => {
+    try {
+      // 登入完成後回到當前 URL（不論 /admin 或 /portal）
+      await instance.loginRedirect({
+        ...loginRequest,
+        redirectStartPage: typeof window !== 'undefined' ? window.location.href : undefined,
+      })
+    } catch (e) {
+      console.error('[portal-auth] login failed', e)
+    }
   }
 
-  const logout = () => {
-    sessionStorage.removeItem(EMAIL_KEY)
-    sessionStorage.removeItem(NAME_KEY)
-    setUser(null)
+  const logout = async () => {
+    await instance.logoutRedirect({
+      postLogoutRedirectUri:
+        typeof window !== 'undefined' ? window.location.origin : undefined,
+    })
   }
 
-  return { user, loading, login, logout }
+  return { user, loading, login, logout, isAuthenticated }
+}
+
+export function isAdmin(user: PortalUser | null): boolean {
+  return !!user && user.roles.includes(ADMIN_ROLE)
 }

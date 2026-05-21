@@ -5,13 +5,15 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
-    "start": "next start",
+    "start": "node node_modules/prisma/build/index.js db push --skip-generate --accept-data-loss && node node_modules/next/dist/bin/next start -p ${PORT:-3000}",
     "db:push": "prisma db push",
     "db:studio": "prisma studio"
   },
   "dependencies": {
     "@ant-design/nextjs-registry": "^1.0.1",
     "@ant-design/v5-patch-for-react-19": "^1.0.3",
+    "@azure/msal-browser": "^5.9.0",
+    "@azure/msal-react": "^5.3.2",
     "@prisma/client": "^5.22.0",
     "antd": "^5.22.0",
     "dayjs": "^1.11.13",

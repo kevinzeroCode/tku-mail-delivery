@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { writeFile } from 'fs/promises'
+import { writeFile, mkdir } from 'fs/promises'
 import path from 'path'
-import { requireAdminAuth } from '@/lib/admin-auth'
+import { getUploadsDir, publicUrlFor } from '@/lib/uploads'
 
-export const maxDuration = 60 // Vercel hobby plan 最大 60 秒
+export const maxDuration = 60
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
 
-// POST /api/ocr — 接收圖片，轉發給 Python OCR 服務 — admin only
+// POST /api/ocr — 接收圖片，轉發給 Python OCR 服務
 export async function POST(req: NextRequest) {
-  const authErr = requireAdminAuth(req)
-  if (authErr) return authErr
-
   try {
     const formData = await req.formData()
     const file = formData.get('file') as File
@@ -25,23 +22,23 @@ export async function POST(req: NextRequest) {
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
-    // 保留原始副檔名
     const originalExt = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
     const safeExt = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(originalExt)
       ? originalExt
       : 'jpg'
     const filename = `ocr_${Date.now()}.${safeExt}`
-    const savePath = path.join(process.cwd(), 'public', 'uploads', filename)
+    const uploadDir = getUploadsDir()
+    const savePath = path.join(uploadDir, filename)
 
-    let savedFilename: string | null = filename
+    let savedPath: string | null = publicUrlFor(filename)
     try {
+      await mkdir(uploadDir, { recursive: true })
       await writeFile(savePath, buffer)
     } catch (fsErr) {
-      console.warn('[ocr] 無法儲存上傳檔案（serverless 環境），繼續 OCR', fsErr)
-      savedFilename = null
+      console.warn('[ocr] 無法儲存上傳檔案，繼續 OCR', fsErr)
+      savedPath = null
     }
 
-    // 轉發給 Python OCR 微服務
     const ocrUrl = process.env.OCR_SERVICE_URL ?? 'http://localhost:8000'
     const ocrForm = new FormData()
     ocrForm.append('file', new Blob([buffer], { type: file.type || 'image/jpeg' }), filename)
@@ -52,7 +49,7 @@ export async function POST(req: NextRequest) {
     } catch (networkErr) {
       console.error('[ocr] OCR 服務無法連線', networkErr)
       return NextResponse.json(
-        { error: 'OCR 服務無法連線', savedPath: savedFilename ? `/uploads/${savedFilename}` : null },
+        { error: 'OCR 服務無法連線', savedPath },
         { status: 502 },
       )
     }
@@ -69,10 +66,9 @@ export async function POST(req: NextRequest) {
       result = JSON.parse(rawBody)
     } catch {
       console.error('[ocr] OCR 回傳非 JSON，前 300 字：', rawBody.slice(0, 300))
-      return NextResponse.json({ error: 'OCR 服務回傳格式錯誤，請確認 Railway 服務狀態' }, { status: 502 })
+      return NextResponse.json({ error: 'OCR 服務回傳格式錯誤，請確認服務狀態' }, { status: 502 })
     }
-
-    return NextResponse.json({ ...result, savedPath: savedFilename ? `/uploads/${savedFilename}` : null })
+    return NextResponse.json({ ...result, savedPath })
   } catch (e) {
     console.error('[POST /api/ocr]', e)
     return NextResponse.json({ error: '伺服器錯誤' }, { status: 500 })

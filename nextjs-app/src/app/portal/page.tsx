@@ -40,10 +40,7 @@ interface PortalMailItem {
 }
 
 // ── 登入卡片 ──────────────────────────────────────────────────────────────────
-function LoginCard({ onLogin }: { onLogin: (email: string, name: string) => void }) {
-  const [email, setEmail] = useState('')
-  const [name,  setName]  = useState('')
-
+function LoginCard({ onLogin }: { onLogin: () => void }) {
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', alignItems: 'center',
@@ -56,38 +53,23 @@ function LoginCard({ onLogin }: { onLogin: (email: string, name: string) => void
           <Text type="secondary">淡江大學收發室</Text>
         </div>
 
-        {/* ── O365 替換提示 ─── 下方為暫時模擬登入，fork 後替換為 MSAL ── */}
         <Alert
           type="info"
-          message="目前使用測試登入"
-          description="正式版將以 Microsoft O365 帳號（@tku.edu.tw）自動登入，無需輸入 Email。"
+          message="僅限淡江大學帳號登入"
+          description="請使用 @tku.edu.tw 系列的 Microsoft 帳號登入。"
           style={{ marginBottom: 16 }}
           showIcon
         />
 
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Input
-            prefix={<MailOutlined />}
-            placeholder="請輸入您的 O365 Email（如 xxx@tku.edu.tw）"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-          />
-          <Input
-            prefix={<UserOutlined />}
-            placeholder="顯示名稱（選填）"
-            value={name}
-            onChange={e => setName(e.target.value)}
-          />
-          <Button
-            type="primary"
-            block
-            size="large"
-            disabled={!email.trim()}
-            onClick={() => onLogin(email.trim(), name.trim())}
-          >
-            登入
-          </Button>
-        </Space>
+        <Button
+          type="primary"
+          block
+          size="large"
+          icon={<UserOutlined />}
+          onClick={onLogin}
+        >
+          以 Microsoft 帳號登入
+        </Button>
       </Card>
     </div>
   )
