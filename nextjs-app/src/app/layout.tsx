@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import '@ant-design/v5-patch-for-react-19'
 import { AntdRegistry } from '@ant-design/nextjs-registry'
+import Providers from '@/components/Providers'
 
 export const metadata: Metadata = {
   title: '郵件收發系統',
@@ -11,7 +12,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="zh-TW">
       <body style={{ margin: 0, background: '#f5f5f5' }}>
-        <AntdRegistry>{children}</AntdRegistry>
+        <AntdRegistry>
+          <Providers>{children}</Providers>
+        </AntdRegistry>
       </body>
     </html>
   )

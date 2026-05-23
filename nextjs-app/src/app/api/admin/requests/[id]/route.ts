@@ -4,8 +4,8 @@ import { requireAdminAuth } from '@/lib/admin-auth'
 
 // PUT /api/admin/requests/[id] — 核准或拒絕申請
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const authErr = requireAdminAuth(req)
-  if (authErr) return authErr
+  const auth = await requireAdminAuth(req)
+  if (!auth.ok) return auth.response
 
   try {
     const { id: idStr } = await params

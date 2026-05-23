@@ -1,11 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAdminAuth } from '@/lib/admin-auth'
 
 // GET /api/settings — 取得所有設定 — admin only
 export async function GET(req: NextRequest) {
-  const authErr = requireAdminAuth(req)
-  if (authErr) return authErr
+  const auth = await requireAdminAuth(req)
+  if (!auth.ok) return auth.response
 
   try {
     const settings = await prisma.setting.findMany()
@@ -19,8 +19,8 @@ export async function GET(req: NextRequest) {
 
 // POST /api/settings — 更新設定（upsert）— admin only
 export async function POST(req: NextRequest) {
-  const authErr = requireAdminAuth(req)
-  if (authErr) return authErr
+  const auth = await requireAdminAuth(req)
+  if (!auth.ok) return auth.response
 
   try {
     const body = await req.json() as Record<string, unknown>

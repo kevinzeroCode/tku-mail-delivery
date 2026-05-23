@@ -6,14 +6,8 @@ import {
 import { CheckOutlined, CloseOutlined, EyeOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { ColumnsType } from 'antd/es/table/interface'
+import { adminAuthHeaders } from '@/lib/admin-client-auth'
 import type { MailRequest, MailRequestType } from '@/lib/types'
-
-const TOKEN_KEY = 'admin_token'
-function authHeader(): Record<string, string> {
-  if (typeof sessionStorage === 'undefined') return {}
-  const token = sessionStorage.getItem(TOKEN_KEY) ?? ''
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
 
 const TYPE_LABELS: Record<MailRequestType, string> = {
   reject_return:   '申請拒收／退回',
@@ -53,7 +47,7 @@ export default function RequestsPanel({ requests, onRefresh }: Props) {
     try {
       const res = await fetch(`/api/admin/requests/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...authHeader() },
+        headers: { 'Content-Type': 'application/json', ...await adminAuthHeaders() },
         body: JSON.stringify({ action, adminNote: adminNotes[id] || null }),
       })
       const data = await res.json()

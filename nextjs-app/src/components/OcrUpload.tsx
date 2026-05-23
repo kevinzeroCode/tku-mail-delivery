@@ -3,13 +3,7 @@ import { useState } from 'react'
 import { Upload, Button, Alert, Spin, List, Typography, Space } from 'antd'
 import { UploadOutlined, ScanOutlined, CameraOutlined, CloseOutlined } from '@ant-design/icons'
 import WebcamCapture from './WebcamCapture'
-
-const TOKEN_KEY = 'admin_token'
-function authHeader(): Record<string, string> {
-  if (typeof sessionStorage === 'undefined') return {}
-  const token = sessionStorage.getItem(TOKEN_KEY) ?? ''
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
+import { adminAuthHeaders } from '@/lib/admin-client-auth'
 
 // Resize image to max 1280px on longest side before sending to OCR.
 // Webcam captures are already small; this mainly helps large phone/scanner photos
@@ -87,7 +81,7 @@ export default function OcrUpload({ onResult }: Props) {
       const formData = new FormData()
       formData.append('file', compressed)
 
-      const res = await fetch('/api/ocr', { method: 'POST', body: formData, headers: authHeader() })
+      const res = await fetch('/api/ocr', { method: 'POST', body: formData, headers: await adminAuthHeaders() })
       const data = await parseOcrResponse(res)
 
       if (!data.ok) throw new Error(data.error ?? 'OCR 失敗')

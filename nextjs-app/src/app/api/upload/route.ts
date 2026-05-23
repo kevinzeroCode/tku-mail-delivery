@@ -1,14 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { writeFile, mkdir } from 'fs/promises'
 import path from 'path'
 import { requireAdminAuth } from '@/lib/admin-auth'
+import { getUploadsDir, publicUrlFor } from '@/lib/uploads'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
 
 // POST /api/upload — 純檔案儲存，不呼叫 OCR 服務 — admin only
 export async function POST(req: NextRequest) {
-  const authErr = requireAdminAuth(req)
-  if (authErr) return authErr
+  const auth = await requireAdminAuth(req)
+  if (!auth.ok) return auth.response
 
   try {
     const formData = await req.formData()
@@ -28,13 +29,13 @@ export async function POST(req: NextRequest) {
       ? originalExt
       : 'jpg'
     const filename = `photo_${Date.now()}.${safeExt}`
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads')
+    const uploadDir = getUploadsDir()
     const savePath = path.join(uploadDir, filename)
 
     await mkdir(uploadDir, { recursive: true })
     await writeFile(savePath, buffer)
 
-    return NextResponse.json({ savedPath: `/uploads/${filename}` })
+    return NextResponse.json({ savedPath: publicUrlFor(filename) })
   } catch (e) {
     console.error('[POST /api/upload]', e)
     return NextResponse.json({ error: '上傳失敗' }, { status: 500 })

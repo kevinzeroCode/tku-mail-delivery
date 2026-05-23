@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { writeFile } from 'fs/promises'
 import path from 'path'
 import { requireAdminAuth } from '@/lib/admin-auth'
+import { getUploadsDir, publicUrlFor } from '@/lib/uploads'
 
 export const maxDuration = 60 // Vercel hobby plan 最大 60 秒
 
@@ -9,8 +10,8 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
 
 // POST /api/ocr — 接收圖片，轉發給 Python OCR 服務 — admin only
 export async function POST(req: NextRequest) {
-  const authErr = requireAdminAuth(req)
-  if (authErr) return authErr
+  const auth = await requireAdminAuth(req)
+  if (!auth.ok) return auth.response
 
   try {
     const formData = await req.formData()
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
       ? originalExt
       : 'jpg'
     const filename = `ocr_${Date.now()}.${safeExt}`
-    const savePath = path.join(process.cwd(), 'public', 'uploads', filename)
+    const savePath = path.join(getUploadsDir(), filename)
 
     let savedFilename: string | null = filename
     try {
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'OCR 服務回傳格式錯誤，請確認 Railway 服務狀態' }, { status: 502 })
     }
 
-    return NextResponse.json({ ...result, savedPath: savedFilename ? `/uploads/${savedFilename}` : null })
+    return NextResponse.json({ ...result, savedPath: savedFilename ? publicUrlFor(savedFilename) : null })
   } catch (e) {
     console.error('[POST /api/ocr]', e)
     return NextResponse.json({ error: '伺服器錯誤' }, { status: 500 })

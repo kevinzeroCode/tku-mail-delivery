@@ -8,14 +8,8 @@ import { PlusOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import WebcamCapture from './WebcamCapture'
 import OcrUpload from './OcrUpload'
+import { adminAuthHeaders } from '@/lib/admin-client-auth'
 import type { MailItem } from '@/lib/types'
-
-const TOKEN_KEY = 'admin_token'
-function authHeader(): Record<string, string> {
-  if (typeof sessionStorage === 'undefined') return {}
-  const token = sessionStorage.getItem(TOKEN_KEY) ?? ''
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
 
 interface Props {
   open: boolean
@@ -45,7 +39,7 @@ export default function AddMailModal({ open, onClose, onCreated, defaultDeadline
       const file = new File([blob], 'webcam.jpg', { type: 'image/jpeg' })
       const fd = new FormData()
       fd.append('file', file)
-      const res = await fetch('/api/ocr', { method: 'POST', body: fd, headers: authHeader() })
+      const res = await fetch('/api/ocr', { method: 'POST', body: fd, headers: await adminAuthHeaders() })
       const data = await res.json()
       if (data.rawText) {
         setWebcamOcrText(data.rawText)
@@ -76,7 +70,7 @@ export default function AddMailModal({ open, onClose, onCreated, defaultDeadline
     const blob = await fetch(photoDataUrl).then(r => r.blob())
     const formData = new FormData()
     formData.append('file', blob, 'webcam.jpg')
-    const res = await fetch('/api/upload', { method: 'POST', body: formData, headers: authHeader() })
+    const res = await fetch('/api/upload', { method: 'POST', body: formData, headers: await adminAuthHeaders() })
     if (!res.ok) return null
     const data = await res.json()
     return data.savedPath ?? null
@@ -97,7 +91,7 @@ export default function AddMailModal({ open, onClose, onCreated, defaultDeadline
       for (const code of codesToCreate) {
         const res = await fetch('/api/items', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeader() },
+          headers: { 'Content-Type': 'application/json', ...await adminAuthHeaders() },
           body: JSON.stringify({
             ...values,
             trackingCode: code,

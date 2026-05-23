@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -30,6 +30,7 @@ model MailItem {
   returnDate       DateTime?                       // 退回日期時間（郵務士退回）
   status           String    @default("待領取")    // 待領取/已領取/已退回
   notes            String?                         // 備註
+  scanStatus       String    @default("未掃描")    // 未掃描/已掃描/異常
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -73,4 +74,14 @@ model Setting {
   id    Int    @id @default(autoincrement())
   key   String @unique
   value String
+}
+
+model AdminUser {
+  id             Int      @id @default(autoincrement())
+  email          String   @unique
+  source         String   @default("manual")
+  createdAt      DateTime @default(now())
+  createdByEmail String?
+
+  @@index([createdAt])
 }

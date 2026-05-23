@@ -1,51 +1,64 @@
 'use client'
-// ╔══════════════════════════════════════════════════════════════════════════╗
-// ║  O365 Auth Placeholder — 待替換為 Microsoft MSAL                        ║
-// ║                                                                          ║
-// ║  Fork 後替換步驟：                                                       ║
-// ║  1. npm install @azure/msal-react @azure/msal-browser                   ║
-// ║  2. 在 layout 包裝 MsalProvider                                         ║
-// ║  3. 將此檔案的 usePortalAuth() 換成：                                   ║
-// ║       const { accounts } = useMsal()                                     ║
-// ║       const user = accounts[0]                                           ║
-// ║         ? { email: accounts[0].username,                                 ║
-// ║             displayName: accounts[0].name ?? '' }                        ║
-// ║         : null                                                            ║
-// ║  4. login() → instance.loginPopup(loginRequest)                          ║
-// ║  5. logout() → instance.logoutPopup()                                    ║
-// ╚══════════════════════════════════════════════════════════════════════════╝
-import { useState, useEffect } from 'react'
 
-const EMAIL_KEY = 'portal_email'
-const NAME_KEY  = 'portal_name'
+import { InteractionRequiredAuthError, InteractionStatus } from '@azure/msal-browser'
+import { useIsAuthenticated, useMsal } from '@azure/msal-react'
+import { loginRequest, readClaims } from './msal-config'
 
 export interface PortalUser {
   email: string
   displayName: string
+  roles: string[]
 }
 
 export function usePortalAuth() {
-  const [user, setUser]       = useState<PortalUser | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { instance, accounts, inProgress } = useMsal()
+  const isAuthenticated = useIsAuthenticated()
+  const account = accounts[0]
 
-  useEffect(() => {
-    const email = sessionStorage.getItem(EMAIL_KEY)
-    const displayName = sessionStorage.getItem(NAME_KEY) ?? ''
-    if (email) setUser({ email, displayName })
-    setLoading(false)
-  }, [])
+  const user: PortalUser | null = account
+    ? (() => {
+        const claims = readClaims(account)
+        return { email: claims.email, displayName: claims.displayName, roles: claims.roles }
+      })()
+    : null
 
-  const login = (email: string, displayName: string) => {
-    sessionStorage.setItem(EMAIL_KEY, email)
-    sessionStorage.setItem(NAME_KEY, displayName)
-    setUser({ email, displayName })
+  const loading =
+    inProgress === InteractionStatus.Startup ||
+    inProgress === InteractionStatus.HandleRedirect
+
+  const login = async () => {
+    await instance.loginRedirect({
+      ...loginRequest,
+      redirectStartPage: typeof window !== 'undefined' ? window.location.href : undefined,
+    })
   }
 
-  const logout = () => {
-    sessionStorage.removeItem(EMAIL_KEY)
-    sessionStorage.removeItem(NAME_KEY)
-    setUser(null)
+  const logout = async () => {
+    await instance.logoutRedirect({
+      postLogoutRedirectUri:
+        typeof window !== 'undefined' ? window.location.origin : undefined,
+    })
   }
 
-  return { user, loading, login, logout }
+  const getIdToken = async () => {
+    if (!account) {
+      await login()
+      throw new Error('login required')
+    }
+
+    try {
+      const result = await instance.acquireTokenSilent({
+        ...loginRequest,
+        account,
+      })
+      return result.idToken
+    } catch (e) {
+      if (e instanceof InteractionRequiredAuthError) {
+        await login()
+      }
+      throw e
+    }
+  }
+
+  return { user, loading, login, logout, getIdToken, isAuthenticated }
 }

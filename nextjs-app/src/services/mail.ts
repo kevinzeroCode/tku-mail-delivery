@@ -3,19 +3,11 @@
  * All fetch logic lives here — UI components import these functions,
  * never call fetch() directly, making them unit-testable without heavy mocking.
  *
- * Admin endpoints require a Bearer token stored in sessionStorage under
- * 'admin_token'.  The token is issued by POST /api/auth on successful login.
+ * Admin endpoints require a Microsoft ID token provided by the admin page's
+ * MSAL session.
  */
 
-const TOKEN_KEY = 'admin_token'
-
-/** Build Authorization header for admin-only endpoints. */
-function authHeader(): Record<string, string> {
-  // sessionStorage is only available in browser contexts
-  if (typeof sessionStorage === 'undefined') return {}
-  const token = sessionStorage.getItem(TOKEN_KEY) ?? ''
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
+import { adminAuthHeaders } from '@/lib/admin-client-auth'
 
 async function unwrap(res: Response): Promise<void> {
   if (!res.ok) {
@@ -28,7 +20,7 @@ export const mailApi = {
   notify: async (itemId: number): Promise<void> => {
     const res = await fetch('/api/notify', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      headers: { 'Content-Type': 'application/json', ...await adminAuthHeaders() },
       body: JSON.stringify({ itemId }),
     })
     await unwrap(res)
@@ -37,7 +29,7 @@ export const mailApi = {
   put: async (id: number, body: Record<string, unknown>): Promise<void> => {
     const res = await fetch(`/api/items/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      headers: { 'Content-Type': 'application/json', ...await adminAuthHeaders() },
       body: JSON.stringify(body),
     })
     await unwrap(res)
@@ -46,7 +38,7 @@ export const mailApi = {
   delete: async (id: number): Promise<void> => {
     const res = await fetch(`/api/items/${id}`, {
       method: 'DELETE',
-      headers: authHeader(),
+      headers: await adminAuthHeaders(),
     })
     await unwrap(res)
   },
@@ -56,7 +48,7 @@ export const mailApi = {
     fd.append('file', file)
     const res = await fetch('/api/upload', {
       method: 'POST',
-      headers: authHeader(),
+      headers: await adminAuthHeaders(),
       body: fd,
     })
     if (!res.ok) throw new Error('照片上傳失敗')
@@ -64,12 +56,16 @@ export const mailApi = {
     return data.savedPath as string
   },
 
+  batchUpdate: async (ids: number[], body: Record<string, unknown>): Promise<PromiseSettledResult<void>[]> => {
+    return Promise.allSettled(ids.map(id => mailApi.put(id, body)))
+  },
+
   ocr: async (file: File): Promise<string | null> => {
     const fd = new FormData()
     fd.append('file', file)
     const res = await fetch('/api/ocr', {
       method: 'POST',
-      headers: authHeader(),
+      headers: await adminAuthHeaders(),
       body: fd,
     })
     if (!res.ok) return null

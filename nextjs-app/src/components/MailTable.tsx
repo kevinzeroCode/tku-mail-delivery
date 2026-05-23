@@ -1,7 +1,7 @@
 'use client'
 import { memo, useMemo, useState } from 'react'
 import {
-  Table, Button, Space, Input, Tooltip, Alert, Drawer,
+  Table, Button, Space, Input, Tooltip, Alert, Drawer, Tag,
   Descriptions, Divider, Collapse, Image, message, notification, Popconfirm,
 } from 'antd'
 import {
@@ -201,6 +201,23 @@ export default memo(function MailTable({ items, onRefresh }: Props) {
         { text: '包裹', value: '包裹' },
       ],
       onFilter: (v, r) => r.mailType === v,
+    },
+    {
+      title: '掃描',
+      dataIndex: 'scanStatus',
+      key: 'scanStatus',
+      width: 80,
+      filters: [
+        { text: '未掃描', value: '未掃描' },
+        { text: '已掃描', value: '已掃描' },
+        { text: '異常',   value: '異常' },
+      ],
+      onFilter: (v, r) => (r.scanStatus ?? '未掃描') === v,
+      render: (v: string) => {
+        const s = v ?? '未掃描'
+        const color = s === '已掃描' ? 'green' : s === '異常' ? 'red' : 'default'
+        return <Tag color={color}>{s}</Tag>
+      },
     },
     {
       title: '到件',

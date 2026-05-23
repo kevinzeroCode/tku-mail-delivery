@@ -9,8 +9,8 @@ function parseId(idStr: string): number | null {
 
 // GET /api/items/[id] — admin only
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const authErr = requireAdminAuth(req)
-  if (authErr) return authErr
+  const auth = await requireAdminAuth(req)
+  if (!auth.ok) return auth.response
 
   try {
     const { id: idStr } = await params
@@ -28,8 +28,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
 // PUT /api/items/[id] — 更新欄位（狀態、領取人等）— admin only
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const authErr = requireAdminAuth(req)
-  if (authErr) return authErr
+  const auth = await requireAdminAuth(req)
+  if (!auth.ok) return auth.response
 
   try {
     const body = await req.json()
@@ -60,6 +60,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
     if (body.photoPath !== undefined) updateData.photoPath = body.photoPath || null
     if (body.notes !== undefined) updateData.notes = body.notes
+    if (body.scanStatus !== undefined) updateData.scanStatus = body.scanStatus
     if (body.photoOcrText !== undefined) updateData.photoOcrText = body.photoOcrText || null
     if (body.signaturePath !== undefined) updateData.signaturePath = body.signaturePath || null
     if (body.notificationSent !== undefined) {
@@ -80,8 +81,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 // DELETE /api/items/[id] — admin only
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const authErr = requireAdminAuth(req)
-  if (authErr) return authErr
+  const auth = await requireAdminAuth(req)
+  if (!auth.ok) return auth.response
 
   try {
     const { id: idStr } = await params

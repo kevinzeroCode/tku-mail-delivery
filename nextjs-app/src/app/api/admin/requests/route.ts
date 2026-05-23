@@ -1,11 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAdminAuth } from '@/lib/admin-auth'
 
 // GET /api/admin/requests — 列出所有申請（後台用）
 export async function GET(req: NextRequest) {
-  const authErr = requireAdminAuth(req)
-  if (authErr) return authErr
+  const auth = await requireAdminAuth(req)
+  if (!auth.ok) return auth.response
 
   try {
     const requests = await prisma.mailRequest.findMany({

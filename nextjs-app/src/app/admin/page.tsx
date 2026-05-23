@@ -2,34 +2,43 @@
 import { useEffect, useState } from 'react'
 import {
   Layout, Card, Button, Typography, Space, Spin, Alert,
-  Modal, Form, InputNumber, Input, Divider, message, Tooltip, Tabs, Badge,
+  Modal, Form, InputNumber, Input, Divider, message, Tooltip, Tabs, Badge, Table, Popconfirm,
 } from 'antd'
 import {
   PlusOutlined, ReloadOutlined, SettingOutlined, MailOutlined, LockOutlined, LogoutOutlined,
-  FileDoneOutlined,
+  FileDoneOutlined, UserOutlined, DeleteOutlined, ScanOutlined,
 } from '@ant-design/icons'
 import MailTable from '@/components/MailTable'
 import AddMailModal from '@/components/AddMailModal'
 import RequestsPanel from '@/components/RequestsPanel'
+import ListScanCheckPanel from '@/components/ListScanCheckPanel'
+import {
+  adminAuthHeaders,
+  localAdminBypassEnabled,
+  localAdminEmail,
+  setAdminTokenProvider,
+} from '@/lib/admin-client-auth'
+import { usePortalAuth } from '@/lib/portal-auth'
 import type { MailItem, MailRequest } from '@/lib/types'
 
-const { Header, Content } = Layout
-const { Title } = Typography
-
-const SESSION_KEY = 'admin_authed'
-const TOKEN_KEY   = 'admin_token'
-
-/** Retrieve stored admin bearer token for authenticated fetch calls. */
-function adminHeaders(): Record<string, string> {
-  const token = sessionStorage.getItem(TOKEN_KEY) ?? ''
-  return token ? { Authorization: `Bearer ${token}` } : {}
+interface AdminUser {
+  id: number
+  email: string
+  source: string
+  createdAt: string
+  createdByEmail: string | null
 }
 
+const { Header, Content } = Layout
+const { Title, Text } = Typography
+
 export default function AdminPage() {
-  const [authed, setAuthed] = useState(false)
-  const [passwordInput, setPasswordInput] = useState('')
-  const [passwordError, setPasswordError] = useState(false)
-  const [checkingAuth, setCheckingAuth] = useState(true)
+  const { user, loading: authLoading, login, logout, getIdToken } = usePortalAuth()
+  const effectiveUser = localAdminBypassEnabled
+    ? { email: localAdminEmail, displayName: 'Local Admin', roles: [] }
+    : user
+  const [adminAllowed, setAdminAllowed] = useState(false)
+  const [permissionChecked, setPermissionChecked] = useState(false)
 
   const [items,    setItems]    = useState<MailItem[]>([])
   const [requests, setRequests] = useState<MailRequest[]>([])
@@ -39,45 +48,20 @@ export default function AdminPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [settingsForm] = Form.useForm()
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
+  const [adminUsersLoading, setAdminUsersLoading] = useState(false)
+  const [newAdminEmail, setNewAdminEmail] = useState('')
 
-  // 簡易 session 驗證（重整頁面後仍保留）
   useEffect(() => {
-    if (sessionStorage.getItem(SESSION_KEY) === 'true') setAuthed(true)
-    setCheckingAuth(false)
-  }, [])
-
-  const handleLogout = () => {
-    sessionStorage.removeItem(SESSION_KEY)
-    sessionStorage.removeItem(TOKEN_KEY)
-    setAuthed(false)
-    setPasswordInput('')
-  }
-
-  const handleLogin = async () => {
-    try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: passwordInput }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        sessionStorage.setItem(SESSION_KEY, 'true')
-        if (data.token) sessionStorage.setItem(TOKEN_KEY, data.token)
-        setAuthed(true)
-      } else {
-        setPasswordError(true)
-      }
-    } catch {
-      setPasswordError(true)
-    }
-  }
+    setAdminTokenProvider(localAdminBypassEnabled ? null : getIdToken)
+    return () => setAdminTokenProvider(null)
+  }, [getIdToken])
 
   const fetchItems = async () => {
     setLoading(true)
     setError(null)
     try {
-      const headers = adminHeaders()
+      const headers = await adminAuthHeaders()
       const [itemsRes, reqsRes] = await Promise.all([
         fetch('/api/items', { headers }),
         fetch('/api/admin/requests', { headers }),
@@ -96,7 +80,7 @@ export default function AdminPage() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch('/api/settings', { headers: adminHeaders() })
+      const res = await fetch('/api/settings', { headers: await adminAuthHeaders() })
       if (!res.ok) return
       const data = await res.json()
       setSettings(data)
@@ -105,18 +89,156 @@ export default function AdminPage() {
     }
   }
 
-  useEffect(() => {
-    if (authed) {
-      fetchItems()
-      fetchSettings()
+  const fetchAdminUsers = async () => {
+      setAdminUsersLoading(true)
+    try {
+      const res = await fetch('/api/admin/users', { headers: await adminAuthHeaders() })
+      if (!res.ok) throw new Error('load failed')
+      const data = await res.json()
+      setAdminUsers(Array.isArray(data) ? data : [])
+    } catch {
+      message.error('管理員名單讀取失敗')
+    } finally {
+      setAdminUsersLoading(false)
     }
-  }, [authed])
+  }
+
+  useEffect(() => {
+    if (!effectiveUser) {
+      setAdminAllowed(false)
+      setPermissionChecked(false)
+      return
+    }
+
+    let cancelled = false
+    async function checkPermissionAndLoad() {
+      setPermissionChecked(false)
+      try {
+        const res = await fetch('/api/admin/users', { headers: await adminAuthHeaders() })
+        if (cancelled) return
+        if (res.ok) {
+          const data = await res.json()
+          setAdminUsers(Array.isArray(data) ? data : [])
+          setAdminAllowed(true)
+          setPermissionChecked(true)
+          fetchItems()
+          fetchSettings()
+        } else {
+          setAdminAllowed(false)
+          setPermissionChecked(true)
+        }
+      } catch {
+        if (!cancelled) {
+          setAdminAllowed(false)
+          setPermissionChecked(true)
+        }
+      }
+    }
+    checkPermissionAndLoad()
+    return () => { cancelled = true }
+  }, [effectiveUser?.email])
+
+  const addAdminUser = async () => {
+    const email = newAdminEmail.trim()
+    if (!email) return
+
+    const res = await fetch('/api/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...await adminAuthHeaders() },
+      body: JSON.stringify({ email }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      message.error(data.error ?? '新增管理員失敗')
+      return
+    }
+
+    message.success('已新增管理員')
+    setNewAdminEmail('')
+    fetchAdminUsers()
+  }
+
+  const removeAdminUser = async (email: string) => {
+    const res = await fetch('/api/admin/users', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', ...await adminAuthHeaders() },
+      body: JSON.stringify({ email }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      message.error(data.error ?? '移除管理員失敗')
+      return
+    }
+
+    message.success('已移除管理員')
+    fetchAdminUsers()
+  }
+
+  const adminUsersPanel = (
+    <Space direction="vertical" style={{ width: '100%' }} size="middle">
+      <Space.Compact style={{ width: 420, maxWidth: '100%' }}>
+        <Input
+          placeholder="admin@example.com"
+          value={newAdminEmail}
+          onChange={e => setNewAdminEmail(e.target.value)}
+          onPressEnter={addAdminUser}
+        />
+        <Button type="primary" icon={<PlusOutlined />} onClick={addAdminUser}>
+          新增
+        </Button>
+      </Space.Compact>
+
+      <Table<AdminUser>
+        dataSource={adminUsers}
+        rowKey="id"
+        size="small"
+        loading={adminUsersLoading}
+        pagination={false}
+        columns={[
+          { title: 'Email', dataIndex: 'email' },
+          {
+            title: '建立時間',
+            dataIndex: 'createdAt',
+            width: 180,
+            render: value => new Date(value).toLocaleString('zh-TW'),
+          },
+          {
+            title: '建立者',
+            dataIndex: 'createdByEmail',
+            width: 180,
+            render: value => value ?? '-',
+          },
+          {
+            title: '來源',
+            dataIndex: 'source',
+            width: 120,
+            render: value => value === 'bootstrap' ? 'Bootstrap' : '手動',
+          },
+          {
+            title: '操作',
+            width: 100,
+            render: (_, record) => (
+              <Popconfirm
+                title="移除此管理員？"
+                okText="移除"
+                cancelText="取消"
+                onConfirm={() => removeAdminUser(record.email)}
+                disabled={record.source === 'bootstrap'}
+              >
+                <Button danger size="small" icon={<DeleteOutlined />} disabled={record.source === 'bootstrap'} />
+              </Popconfirm>
+            ),
+          },
+        ]}
+      />
+    </Space>
+  )
 
   const saveSettings = async () => {
     const values = settingsForm.getFieldsValue()
     const res = await fetch('/api/settings', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+      headers: { 'Content-Type': 'application/json', ...await adminAuthHeaders() },
       body: JSON.stringify({ deadlineDays: String(values.deadlineDays) }),
     })
     if (!res.ok) {
@@ -142,27 +264,53 @@ export default function AdminPage() {
   }
 
   // ── 載入中 ──────────────────────────────────────────
-  if (checkingAuth) return null
+  if ((!localAdminBypassEnabled && authLoading) || (effectiveUser && !permissionChecked)) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Spin size="large" />
+      </div>
+    )
+  }
 
-  // ── 登入畫面 ────────────────────────────────────────
-  if (!authed) {
+  if (!effectiveUser) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f2f5' }}>
-        <Card style={{ width: 360, textAlign: 'center' }}>
+        <Card style={{ width: 380, textAlign: 'center' }}>
           <LockOutlined style={{ fontSize: 48, color: '#1677ff', marginBottom: 16 }} />
-          <Title level={4} style={{ marginBottom: 24 }}>管理員後台</Title>
-          <Input.Password
-            placeholder="請輸入管理員密碼"
+          <Title level={4} style={{ marginBottom: 8 }}>管理員後台</Title>
+          <Text type="secondary">請使用 Microsoft 帳號登入</Text>
+          <Button
+            type="primary"
             size="large"
-            value={passwordInput}
-            onChange={e => { setPasswordInput(e.target.value); setPasswordError(false) }}
-            onPressEnter={handleLogin}
-            status={passwordError ? 'error' : undefined}
-          />
-          {passwordError && <div style={{ color: '#ff4d4f', marginTop: 8 }}>密碼錯誤</div>}
-          <Button type="primary" size="large" block style={{ marginTop: 16 }} onClick={handleLogin}>
-            進入
+            block
+            icon={<UserOutlined />}
+            style={{ marginTop: 24 }}
+            onClick={login}
+          >
+            Microsoft 登入
           </Button>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!adminAllowed) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f2f5' }}>
+        <Card style={{ width: 420, textAlign: 'center' }}>
+          <LockOutlined style={{ fontSize: 48, color: '#ff4d4f', marginBottom: 16 }} />
+          <Title level={4}>沒有後台管理權限</Title>
+          <Alert
+            type="warning"
+            message="此帳號未列在管理員名單"
+            description={`目前登入：${effectiveUser.displayName || effectiveUser.email}`}
+            style={{ marginTop: 16, marginBottom: 16, textAlign: 'left' }}
+            showIcon
+          />
+          <Space>
+            <Button onClick={logout}>登出並切換帳號</Button>
+            <Button type="link" href="/">回公開查詢頁</Button>
+          </Space>
         </Card>
       </div>
     )
@@ -177,6 +325,10 @@ export default function AdminPage() {
           <Title level={4} style={{ color: '#fff', margin: 0 }}>郵件收發管理後台</Title>
         </Space>
         <Space>
+          <Text style={{ color: 'rgba(255,255,255,.85)', fontSize: 13 }}>
+            <UserOutlined style={{ marginRight: 4 }} />
+            {effectiveUser.displayName || effectiveUser.email}
+          </Text>
           <Button type="text" style={{ color: '#fff' }} href="/">公開查詢頁</Button>
           <Tooltip title="系統設定">
             <Button icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)} />
@@ -187,7 +339,7 @@ export default function AdminPage() {
             新增郵件
           </Button>
           <Tooltip title="登出">
-            <Button icon={<LogoutOutlined />} onClick={handleLogout} style={{ color: '#fff' }} type="text" />
+            <Button icon={<LogoutOutlined />} onClick={logout} style={{ color: '#fff' }} type="text" />
           </Tooltip>
         </Space>
       </Header>
@@ -212,6 +364,7 @@ export default function AdminPage() {
 
         <Card style={{ marginTop: 8 }}>
           <Tabs
+            destroyOnHidden={false}
             items={[
               {
                 key: 'mails',
@@ -230,6 +383,20 @@ export default function AdminPage() {
                 children: loading
                   ? <div style={{ textAlign: 'center', padding: 48 }}><Spin size="large" /></div>
                   : <RequestsPanel requests={requests} onRefresh={fetchItems} />,
+              },
+              {
+                key: 'scan',
+                label: <><ScanOutlined />清單掃描查核</>,
+                children: (
+                  <Spin spinning={loading} tip="資料載入中…">
+                    <ListScanCheckPanel items={items} onRefresh={fetchItems} />
+                  </Spin>
+                ),
+              },
+              {
+                key: 'admin-users',
+                label: <><UserOutlined />管理員名單</>,
+                children: adminUsersPanel,
               },
             ]}
           />

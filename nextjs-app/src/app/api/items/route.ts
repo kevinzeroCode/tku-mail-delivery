@@ -1,11 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAdminAuth } from '@/lib/admin-auth'
 
 // GET /api/items — 取得所有郵件（支援篩選）— admin only
 export async function GET(req: NextRequest) {
-  const authErr = requireAdminAuth(req)
-  if (authErr) return authErr
+  const auth = await requireAdminAuth(req)
+  if (!auth.ok) return auth.response
 
   try {
     const { searchParams } = new URL(req.url)
@@ -37,8 +37,8 @@ export async function GET(req: NextRequest) {
 
 // POST /api/items — 新增郵件 — admin only
 export async function POST(req: NextRequest) {
-  const authErr = requireAdminAuth(req)
-  if (authErr) return authErr
+  const auth = await requireAdminAuth(req)
+  if (!auth.ok) return auth.response
 
   try {
     const body = await req.json()

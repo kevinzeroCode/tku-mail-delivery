@@ -3,6 +3,7 @@ import { memo, useRef, useState } from 'react'
 import { Modal, Form, Descriptions, Select, Input, Space, DatePicker, message, Typography } from 'antd'
 import dayjs from 'dayjs'
 import { mailApi } from '@/services/mail'
+import { adminAuthHeaders } from '@/lib/admin-client-auth'
 import SignaturePad, { type SignaturePadRef } from './SignaturePad'
 import type { MailItem } from '@/lib/types'
 
@@ -13,13 +14,6 @@ const PICKUP_METHODS = [
   { value: '說明告知', label: '說明告知' },
   { value: '其他', label: '其他' },
 ]
-
-const TOKEN_KEY = 'admin_token'
-function authHeader(): Record<string, string> {
-  if (typeof sessionStorage === 'undefined') return {}
-  const token = sessionStorage.getItem(TOKEN_KEY) ?? ''
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
 
 interface Props {
   item: MailItem | null
@@ -33,7 +27,7 @@ async function uploadSignature(dataUrl: string): Promise<string | null> {
     const file = new File([blob], `sig_${Date.now()}.png`, { type: 'image/png' })
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch('/api/upload', { method: 'POST', body: fd, headers: authHeader() })
+    const res = await fetch('/api/upload', { method: 'POST', body: fd, headers: await adminAuthHeaders() })
     if (!res.ok) return null
     const data = await res.json()
     return data.savedPath ?? null

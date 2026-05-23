@@ -35,3 +35,14 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# TypeScript build cache
+tsconfig.tsbuildinfo
+**/*.tsbuildinfo
+
+# Archives
+*.zip
+
+# 本地副本（不進版控）
+last_version/
+another workflow/

@@ -1,62 +1,128 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { prisma } from '@/lib/db'
+import {
+  bootstrapAdminEmails,
+  extractAdminEmailFromClaims,
+  isBootstrapAdminEmail,
+} from '@/lib/admin-users'
+import { extractBearerToken, localAdminBypassEmail, validateAdminAuthConfig } from '@/lib/admin-auth-core'
 
-/**
- * Checks whether an incoming API request carries the admin session token.
- *
- * The admin login page POSTs to /api/auth which validates the password and
- * returns a signed JWT.  Every subsequent admin API call must include that
- * token in the `Authorization: Bearer <token>` header.
- *
- * For the current v1 implementation we use a simple HMAC-signed token so
- * we have NO additional dependency.  When O365 / MSAL lands, swap this for
- * a proper JWT library and move to short-lived access tokens.
- */
+const tenantId = process.env.NEXT_PUBLIC_AZURE_TENANT_ID ?? ''
+const clientId = process.env.NEXT_PUBLIC_AZURE_CLIENT_ID ?? ''
+const issuer = `https://login.microsoftonline.com/${tenantId}/v2.0`
+const jwks = createRemoteJWKSet(
+  new URL(`https://login.microsoftonline.com/${tenantId}/discovery/v2.0/keys`)
+)
 
-import { createHmac, timingSafeEqual } from 'crypto'
+export type AdminAuthResult =
+  | { ok: true; email: string }
+  | { ok: false; response: NextResponse }
 
-const SECRET = process.env.ADMIN_JWT_SECRET ?? process.env.ADMIN_PASSWORD ?? 'changeme'
-const TOKEN_TTL_MS = 8 * 60 * 60 * 1000 // 8 hours
+async function ensureBootstrapAdmin(email: string) {
+  if (!isBootstrapAdminEmail(email)) return
 
-/** Produce a signed token encoding the current timestamp. */
-export function signAdminToken(): string {
-  const ts = Date.now().toString()
-  const sig = createHmac('sha256', SECRET).update(ts).digest('hex')
-  return Buffer.from(`${ts}.${sig}`).toString('base64url')
+  await prisma.adminUser.upsert({
+    where: { email },
+    update: { source: 'bootstrap' },
+    create: {
+      email,
+      source: 'bootstrap',
+      createdByEmail: 'ADMIN_BOOTSTRAP_EMAILS',
+    },
+  })
 }
 
-/** Returns true iff the token is valid and not expired. */
-export function verifyAdminToken(token: string): boolean {
+export async function syncBootstrapAdmins() {
+  const emails = bootstrapAdminEmails()
+  if (emails.length === 0) return
+
+  await Promise.all(
+    emails.map(email =>
+      prisma.adminUser.upsert({
+        where: { email },
+        update: { source: 'bootstrap' },
+        create: {
+          email,
+          source: 'bootstrap',
+          createdByEmail: 'ADMIN_BOOTSTRAP_EMAILS',
+        },
+      })
+    )
+  )
+}
+
+async function authorizeAdminEmail(email: string): Promise<AdminAuthResult> {
+  await ensureBootstrapAdmin(email)
+
+  const admin = await prisma.adminUser.findUnique({
+    where: { email },
+    select: { email: true },
+  })
+  if (!admin) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: '沒有後台管理權限' }, { status: 403 }),
+    }
+  }
+
+  return { ok: true, email }
+}
+
+export async function requireAdminAuth(req: NextRequest): Promise<AdminAuthResult> {
+  const localEmail = localAdminBypassEmail({
+    nodeEnv: process.env.NODE_ENV,
+    enabled: process.env.LOCAL_ADMIN_BYPASS,
+    configuredEmail: process.env.LOCAL_ADMIN_EMAIL,
+    headerEmail: req.headers.get('x-local-admin-email'),
+  })
+  if (localEmail) {
+    return authorizeAdminEmail(localEmail)
+  }
+
+  const config = validateAdminAuthConfig({ tenantId, clientId })
+  if (!config.ok) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: '管理員登入設定未完成' }, { status: 500 }),
+    }
+  }
+
+  const token = extractBearerToken(req.headers.get('authorization'))
+  if (!token) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: '請先登入' }, { status: 401 }),
+    }
+  }
+
   try {
-    const decoded = Buffer.from(token, 'base64url').toString()
-    const dotIdx = decoded.lastIndexOf('.')
-    if (dotIdx < 0) return false
-    const ts  = decoded.slice(0, dotIdx)
-    const sig = decoded.slice(dotIdx + 1)
+    const { payload } = await jwtVerify(token, jwks, {
+      issuer,
+      audience: clientId,
+    })
 
-    // Constant-time comparison to prevent timing attacks
-    const expected = createHmac('sha256', SECRET).update(ts).digest('hex')
-    const sigBuf      = Buffer.from(sig,      'utf8')
-    const expectedBuf = Buffer.from(expected, 'utf8')
-    if (sigBuf.length !== expectedBuf.length) return false
-    if (!timingSafeEqual(sigBuf, expectedBuf)) return false
+    if (payload.tid !== tenantId) {
+      return {
+        ok: false,
+        response: NextResponse.json({ error: '登入租用戶不正確' }, { status: 401 }),
+      }
+    }
 
-    // Check TTL
-    const issued = parseInt(ts, 10)
-    return Date.now() - issued < TOKEN_TTL_MS
-  } catch {
-    return false
+    const email = extractAdminEmailFromClaims(payload)
+    if (!email) {
+      return {
+        ok: false,
+        response: NextResponse.json({ error: 'Microsoft token 缺少 email' }, { status: 401 }),
+      }
+    }
+
+    return authorizeAdminEmail(email)
+  } catch (e) {
+    console.error('[admin-auth] token verification failed', e)
+    return {
+      ok: false,
+      response: NextResponse.json({ error: '登入驗證失敗' }, { status: 401 }),
+    }
   }
-}
-
-/**
- * Call at the start of every admin API handler.
- * Returns null if the request is authorised, or a 401 NextResponse to return immediately.
- */
-export function requireAdminAuth(req: NextRequest): NextResponse | null {
-  const auth = req.headers.get('authorization') ?? ''
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
-  if (!token || !verifyAdminToken(token)) {
-    return NextResponse.json({ error: '未授權，請先登入' }, { status: 401 })
-  }
-  return null
 }

@@ -1,5 +1,6 @@
 export type MailStatus = '待領取' | '已領取' | '已退回'
 export type MailType = '普通' | '掛號' | '公文' | '包裹'
+export type ScanStatus = '未掃描' | '已掃描' | '異常'
 
 export interface MailItem {
   id: number
@@ -23,6 +24,7 @@ export interface MailItem {
   returnDate: string | null
   status: MailStatus
   notes: string | null
+  scanStatus: ScanStatus
   createdAt: string
   updatedAt: string
 }
